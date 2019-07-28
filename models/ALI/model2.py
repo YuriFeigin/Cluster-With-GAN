@@ -5,7 +5,9 @@ import models.x_generators as x_generators
 
 def z_generator(in_,z_len,DIM, is_training,image_size, reuse):
     with tf.variable_scope("Encoder", reuse=reuse) as scope:
-        return z_generators.z_generator2(in_,[None,None],z_len,DIM,True, is_training,image_size, reuse)
+        output1 = z_generators.z_generator2(in_, [None, None], DIM, True, is_training, image_size, reuse)
+        output2 = tf.layers.dense(output1,z_len)
+        return output2
 
 def x_generator(in_,DIM,is_training,image_size, reuse):
     with tf.variable_scope("Decoder", reuse=reuse) as scope:
@@ -14,7 +16,7 @@ def x_generator(in_,DIM,is_training,image_size, reuse):
 def discriminator(in_x, in_z,DIM, is_training,image_size, reuse):
     labels = [None, None]
     with tf.variable_scope("Discriminator", reuse=reuse) as scope:
-        out_x = z_generators.z_generator12(in_x,labels,None,DIM,None, is_training,image_size, reuse)
+        out_x = z_generators.z_generator12(in_x,labels,DIM,None, is_training,image_size, reuse)
         out_x = tf.layers.dense(out_x, 512)
 
         out_z = in_z

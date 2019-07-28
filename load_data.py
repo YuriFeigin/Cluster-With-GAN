@@ -43,6 +43,8 @@ def Load(name, data, shuffle, batch_size, img_size):
 class DataSet:
     def __init__(self):
         self.is_init = False
+        self.is_imgs = None
+        self.resize = None
 
     def build_dataset(self, shuffle, batch_size, img_size, map_func=None):
         def dataset_map_resize(img, labels):
@@ -57,8 +59,8 @@ class DataSet:
         dataset = tf.data.Dataset.from_tensor_slices((self.imgs_placeholder, self.labels_placeholder))
         if map_func is not None:
             dataset = dataset.map(map_func, num_parallel_calls=16)
-        if (img_size is not None and img_size > 100) or not self.is_imgs:
-                dataset = dataset.map(dataset_map_resize, num_parallel_calls=16)
+        if self.resize and img_size > 100 and not self.is_imgs:
+            dataset = dataset.map(dataset_map_resize, num_parallel_calls=16)
         if shuffle:
             dataset = dataset.shuffle(4096)
             dataset = dataset.batch(batch_size,drop_remainder=True)
@@ -115,7 +117,7 @@ class DataSet:
         ind = self.ind.get(self.data)
         self.imgs = self.imgs[ind]
         self.labels = self.labels[ind]
-        if self.img_size is not None and self.img_size <= 100 and self.is_imgs:
+        if self.resize and self.img_size <= 100 and self.is_imgs:
             print('start resize',flush=True)
             self.imgs = np.stack([resize(img, (self.img_size, self.img_size), anti_aliasing=True) * 255 for img in self.imgs], 0)
             print('finish resize',flush=True)
@@ -137,10 +139,12 @@ class cifar10(DataSet):
         self.data = data
         self.shuffle = shuffle
         self.batch_size = batch_size
-        if img_size == 32:
-            self.img_size = img_size = None
+        if img_size is None or img_size == 32:
+            self.img_size = 32
+            self.resize = False
         else:
             self.img_size = img_size
+            self.resize = True
         self.is_imgs = True
         self.num_classes = 10
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
@@ -157,7 +161,7 @@ class cifar10(DataSet):
         self.ind['train'] = train_ind
         self.ind['test'] = test_ind
         self.ind['all'] = np.logical_or(train_ind, test_ind)
-        self.build_dataset(shuffle, batch_size, img_size)
+        self.build_dataset(shuffle, batch_size, self.img_size)
 
 class cifar100(DataSet):
     def __init__(self, data, shuffle, batch_size, img_size):
@@ -165,10 +169,12 @@ class cifar100(DataSet):
         self.data = data
         self.shuffle = shuffle
         self.batch_size = batch_size
-        if img_size == 32:
-            self.img_size = img_size = None
+        if img_size is None or img_size == 32:
+            self.img_size = 32
+            self.resize = False
         else:
             self.img_size = img_size
+            self.resize = True
         self.is_imgs = True
         self.num_classes = 20
         (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar100.load_data("coarse")
@@ -185,7 +191,7 @@ class cifar100(DataSet):
         self.ind['train'] = train_ind
         self.ind['test'] = test_ind
         self.ind['all'] = np.logical_or(train_ind,test_ind)
-        self.build_dataset(shuffle, batch_size, img_size)
+        self.build_dataset(shuffle, batch_size, self.img_size)
         
 class stl10(DataSet):
     def __init__(self, data, shuffle, batch_size, img_size):
@@ -193,10 +199,12 @@ class stl10(DataSet):
         self.data = data
         self.shuffle = shuffle
         self.batch_size = batch_size
-        if img_size == 96:
-            self.img_size = img_size = None
+        if img_size is None or img_size == 96:
+            self.img_size = 96
+            self.resize = False
         else:
             self.img_size = img_size
+            self.resize = True
         self.is_imgs = True
         self.num_classes = 10
 
@@ -223,7 +231,7 @@ class stl10(DataSet):
         self.ind['test'] = test_ind
         self.ind['all'] = np.logical_or(self.ind['train'],test_ind)
 
-        self.build_dataset(shuffle, batch_size, img_size)
+        self.build_dataset(shuffle, batch_size, self.img_size)
         
     @staticmethod
     def read_images(path_to_data):
@@ -246,13 +254,19 @@ class celeba(DataSet):
         self.data = data
         self.shuffle = shuffle
         self.batch_size = batch_size
-        self.img_size = img_size
+        if img_size is None or img_size == 64:
+            self.img_size = 64
+            self.resize = False
+        else:
+            self.img_size = img_size
+            self.resize = True
         self.is_imgs = False
         self.num_classes = None
 
         self.partition_fn = partition_fn = os.path.join(CELEBA_PATH, 'list_eval_partition.txt')
         with open(partition_fn, "r") as infile:
             img_fn_list = infile.readlines()
+        self.img_fn_list = img_fn_list
         imgs = []
         imgs_datasets = []
         for elems in img_fn_list:
@@ -284,22 +298,18 @@ class celeba(DataSet):
             img = tf.read_file(path)
             img = tf.image.decode_jpeg(img, 3)
             img = img[40:188, 15:163, :]
+            img = tf.image.resize_images(img, [self.img_size, self.img_size], method=tf.image.ResizeMethod.BILINEAR)
             # img = tf.image.resize_images(img, [img_size, img_size], method=0, align_corners=False)
             # img = (tf.cast(img, tf.float32))  # / 256. # + tf.random_uniform(tf.shape(img))
             # if mode == 'train':
             #     img = tf.image.random_flip_left_right(img)
             return img, labels
 
-        self.build_dataset(shuffle, batch_size, img_size, map_func_2)
+        self.build_dataset(shuffle, batch_size, self.img_size, map_func_2)
 
     def load_sub_imgs(self,sz):
         if self.is_init:
-            if self.data == 'train':
-                ind = 0
-            elif self.data == 'test':
-                ind = 2
-        img_fn_list = np.array([os.path.join(CELEBA_PATH, 'img_align_celeba', elem[0]) for elem in self.img_fn_list if int(elem[1]) == ind]) # 162770
-        img_fn_list = img_fn_list[np.random.permutation(len(img_fn_list))[:sz]]
-        images = np.stack([resize(io.imread(f)[40:188, 15:163, :], (64, 64), anti_aliasing=True)*255 for f in img_fn_list])
+            imgs = np.random.permutation(self.imgs)[:sz]
+        images = np.stack([resize(io.imread(f)[40:188, 15:163, :], (64, 64), anti_aliasing=True)*255 for f in imgs])
         return images
 

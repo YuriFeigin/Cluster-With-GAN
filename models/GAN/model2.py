@@ -14,7 +14,7 @@ def Generator(n_samples,DIM_G,z_len, labels,is_training,image_size, reuse, noise
 
 def Discriminator(inputs,DIM_D, labels,is_training,image_size, reuse):
         with tf.variable_scope("Discriminator", reuse=reuse) as scope:
-            output2 = z_generators.z_generator13(inputs, labels,None, DIM_D, False,is_training, image_size, reuse)
+            output2 = z_generators.z_generator13(inputs, labels, DIM_D, False,is_training, image_size, reuse)
             output_wgan = tf.layers.dense(output2, 1, name='Output')
             output_wgan = tf.reshape(output_wgan, [-1])  # conrresponding to D
             if labels[1] is None:

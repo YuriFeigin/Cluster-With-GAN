@@ -36,7 +36,7 @@ def main(args, logging):
     next_element_train = dataset_train.get_imgs_next()
     dataset_eval = load_data.Load(args.dataset, 'all', shuffle=False, batch_size=500,img_size=args.img_size)
     next_element_eval = dataset_eval.get_imgs_next()
-    image_size = [args.img_size,args.img_size,next_element_eval.shape.as_list()[-1]]
+    image_size = [dataset_train.img_size,dataset_train.img_size,next_element_eval.shape.as_list()[-1]]
 
     # define inputs
     input_x = tf.placeholder(tf.float32, [batch_size,] + image_size)
@@ -47,7 +47,6 @@ def main(args, logging):
     imgs_real = input_x + tf.random_uniform(shape=[batch_size] + image_size, minval=0., maxval=1.)  # dequantize
     imgs_real = imgs_real / 128. - 1
     imgs_real = tf.image.random_flip_left_right(imgs_real)
-
 
     # network
     x_gen = model.x_generator(sam_z, args.dim_decoder, is_training=True, image_size=image_size, reuse=False)
@@ -193,9 +192,9 @@ def main(args, logging):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset', choices=['celeba', 'cifar10', 'cifar100', 'stl10'], type=str, help='choose dataset')
-    parser.add_argument('--train_on',default='train', choices=['train', 'test', 'labeled', 'all'], type=str,
+    parser.add_argument('--train_on',default='all', choices=['train', 'test', 'all'], type=str,
                         help='on which images to train')
-    parser.add_argument('--img_size', default=32, type=int, help='the seed of the network initial')
+    parser.add_argument('--img_size', default=None, type=int, help='the seed of the network initial')
     parser.add_argument('log_dir', type=str, help='where to save all logs')
     parser.add_argument('--architecture', default='model2', choices=['model1', 'model2', 'ALI_orig_celeba', 'ALI_orig_cifar10'],
                         type=str, help='maximum iteration until stop')
@@ -212,10 +211,10 @@ if __name__ == "__main__":
     parser.add_argument('--save_images', default=True, type=bool, help='save images')
     parser.add_argument('--log_iter', default=20, type=int, help='number of iteration to save log')
     parser.add_argument('--alice', default=False, type=bool, help='use ALI conditional entropy')
-    parser.add_argument('--aug', default=0.001, type=float, help='weight on the constrain of latent space augmentation')
+    parser.add_argument('--aug', default=0, type=float, help='weight on the constrain of latent space augmentation')#0.001
     parser.add_argument('--tensorboard_log', default=True, type=bool, help='create tensorboard logs')
     parser.add_argument('--gpu', default=0, type=int, help='use gpu number')
-    parser.add_argument('--calc_cluster', default=False, type=bool, help='calculate clustering curves')
+    parser.add_argument('--calc_cluster', default=False, action='store_true', help='calculate clustering curves')
 
     args = parser.parse_args()
     os.makedirs(args.log_dir)
@@ -241,7 +240,8 @@ if __name__ == "__main__":
         p = subprocess.Popen("python cluster_analysis.py " + args.log_dir + " full",cwd=os.getcwd(),
                              shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     main(args, logging)
-
-    if args.calc_cluster:
-        (stdoutput, erroutput) = p.communicate(timeout=600)
-        print(stdoutput)
+    time.sleep(600)
+    p.kill()
+    # if args.calc_cluster:
+    #     (stdoutput, erroutput) = p.communicate(timeout=600)
+    #     print(stdoutput)

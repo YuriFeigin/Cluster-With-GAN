@@ -27,19 +27,25 @@ python cluster_analysis.py ./results/clustering/cifar10 draw
 ```
 <img src="images/clustering/cifar10/cluster_samples.png"/>
 and calculate the final results of ACC, NMI and ARI by running
+
 ```
 python cluster_analysis.py ./results/clustering/cifar10 final
 ```
-
+## CIFAR100
 to train the network on cifar100 run
 ```
-python train_clustering.py cifar100 ./results/clustering/cifar100 --gpu 0 --architecture model2 --seed 1
+python train_clustering.py cifar100 ./results/clustering/cifar100 --architecture model2 --seed 1
 ```
+## STL10
 to train the network on stl10 run
 ```
-python train_clustering.py stl10 ./results/clustering/stl10 --gpu 0 --architecture model2 --seed 1
+python train_clustering.py stl10 ./results/clustering/stl10 --architecture model2 --seed 1 --img_size 32
 ```
-
+## celeba
+to train the network on celeba run
+```
+python train_clustering.py celeba ./results/clustering/celeba --architecture ALI_orig_celeba --seed 1 --z_len 512 --max_iter 200000
+```
 
 
  
