@@ -12,7 +12,7 @@ def maxout(in_, n_piece):
 
 def x_generator(in_,DIM, is_training,image_size, reuse):
     shape = in_.get_shape().as_list()
-    with tf.variable_scope("x_generator", reuse=reuse) as scope:
+    with tf.variable_scope("Decoder", reuse=reuse) as scope:
         out = tf.reshape(in_,[shape[0],1,1,shape[1]])
         out = tf.layers.conv2d_transpose(out, filters=512, kernel_size=4, strides=1)
         out = tf.layers.batch_normalization(out, training=is_training)
@@ -36,7 +36,7 @@ def x_generator(in_,DIM, is_training,image_size, reuse):
 
 def z_generator(in_,z_len,DIM_En, is_training,image_size, reuse):
     shape = in_.get_shape().as_list()
-    with tf.variable_scope("z_generator", reuse=reuse) as scope:
+    with tf.variable_scope("Encoder", reuse=reuse) as scope:
         out = tf.layers.conv2d(in_, filters=64, kernel_size=2, strides=1)
         out = tf.layers.batch_normalization(out, training=is_training)
         out = tf.nn.leaky_relu(out, 0.02)
