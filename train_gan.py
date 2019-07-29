@@ -11,7 +11,8 @@ from datetime import datetime
 import numpy as np
 import tensorflow as tf
 
-import models.GAN.model2 as model
+import models.GAN.model1 as model1
+import models.GAN.model2 as model2
 import load_data
 import utils.utils_summary as utils_summary
 import utils.inception_score as inception_score
@@ -35,7 +36,9 @@ def main(args, logging):
     CALC_NDB = args.calc_ndb
     INCEPTION_FREQUENCY = args.INCEPTION_FREQUENCY
 
-
+    # choose model
+    all_models = {'model1': model1, 'model2': model2}
+    model = all_models.get(args.architecture)
 
     dataset_train = load_data.Load(args.dataset, args.train_on, shuffle=True, batch_size=batch_size,img_size=args.img_size)
     next_element_train = dataset_train.get_full_next()
@@ -49,12 +52,12 @@ def main(args, logging):
     elif args.label == 'sup':
         n_labels = dataset_train.num_classes
 
-    # dataset_train._init_dataset()
-    # TrainData = dataset_train.load_sub_imgs(80000)
-    # if CALC_INCEPTION:
-    #     inception_score.update_fid_mean(TrainData)
-    # if CALC_NDB:
-    #     ndb_model = ndb.NDB(TrainData, max_dims=2000, semi_whitening=True)
+    dataset_train._init_dataset()
+    TrainData = dataset_train.load_sub_imgs(80000)
+    if CALC_INCEPTION:
+        inception_score.update_fid_mean(TrainData)
+    if CALC_NDB:
+        ndb_model = ndb.NDB(TrainData, max_dims=2000, semi_whitening=True)
 
     
     _iteration = tf.placeholder(tf.int32, shape=None)
