@@ -20,5 +20,5 @@ python train_gan.py cifar100 ./results/GAN/cifar100_clu clustering --clustering_
 python train_gan.py stl10 ./results/GAN/stl10_clu clustering --clustering_path ./results/clustering/stl10/ --architecture model2 --seed 1 --img_size 48
 ```
 ```
-python train_gan.py celeba ./results/GAN/celeba_clu clustering --clustering_path ./results/clustering/celeba/ --architecture model1 --seed 1 --z_len 512
+python train_gan.py celeba ./results/GAN/celeba_clu clustering --clustering_path ./results/clustering/celeba/ --architecture model1 --seed 1 --z_len 512 --DIM_G 64 --DIM_D 64
 ```

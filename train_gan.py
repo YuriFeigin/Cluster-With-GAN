@@ -39,7 +39,7 @@ def main(args, logging):
 
     dataset_train = load_data.Load(args.dataset, args.train_on, shuffle=True, batch_size=batch_size,img_size=args.img_size)
     next_element_train = dataset_train.get_full_next()
-    image_size = [args.img_size,args.img_size,next_element_train[0].shape.as_list()[-1]]
+    image_size = [dataset_train.img_size,dataset_train.img_size,next_element_train[0].shape.as_list()[-1]]
 
     if args.label == 'unsup':
         n_labels = None
@@ -49,12 +49,12 @@ def main(args, logging):
     elif args.label == 'sup':
         n_labels = dataset_train.num_classes
 
-    dataset_train._init_dataset()
-    TrainData = dataset_train.load_sub_imgs(80000)
-    if CALC_INCEPTION:
-        inception_score.update_fid_mean(TrainData)
-    if CALC_NDB:
-        ndb_model = ndb.NDB(TrainData, max_dims=2000, semi_whitening=True)
+    # dataset_train._init_dataset()
+    # TrainData = dataset_train.load_sub_imgs(80000)
+    # if CALC_INCEPTION:
+    #     inception_score.update_fid_mean(TrainData)
+    # if CALC_NDB:
+    #     ndb_model = ndb.NDB(TrainData, max_dims=2000, semi_whitening=True)
 
     
     _iteration = tf.placeholder(tf.int32, shape=None)
@@ -335,7 +335,7 @@ if __name__ == "__main__":
     parser.add_argument('--n_clusters',default=40, type=int, help='number of clusters')
     parser.add_argument('--train_on', default='train', choices=['train', 'test', 'all'], type=str,
                         help='on which images to train')
-    parser.add_argument('--img_size', default=32, type=int, help='the seed of the network initial')
+    parser.add_argument('--img_size', default=None, type=int, help='the seed of the network initial')
     parser.add_argument('--architecture', default='model2', choices=['model1', 'model2', 'model2'],
                         type=str, help='maximum iteration until stop')
     parser.add_argument('--max_iter', default=200000, type=int, help='maximum iteration until stop')
