@@ -252,6 +252,8 @@ def main(args, logging):
         it = -1
         ep = -1
         global_step = -1
+        best_IS1 = -1
+        best_IS2 = -1
         while global_step<max_iter:  # for epoch
             dataset_train.init_dataset(sess)
             ep += 1
@@ -295,8 +297,24 @@ def main(args, logging):
                     if tensorboard_log and CALC_INCEPTION and global_step % INCEPTION_FREQUENCY == INCEPTION_FREQUENCY - 1:
                         samples1 = get_samples(50000)
                         inception_score1_m, inception_score1_s, fid1 = inception_score.calc_scores(samples1)
-                        samples1 = get_samples(50000)
-                        inception_score2_m, inception_score2_s, fid2 = inception_score.calc_scores(samples1)
+                        info_str = 'IS_mean: {:6.3f} , IS_std: {:6.3f} , fid: {:6.3f}'.format(inception_score1_m,
+                                                                                              inception_score1_s, fid1)
+                        logging.info(info_str)
+                        if inception_score1_m>best_IS1:
+                            best_IS1 = inception_score1_m
+                            samples1 = get_samples(50000)
+                            inception_score2_m, inception_score2_s, fid2 = inception_score.calc_scores(samples1)
+                            info_str = 'IS_mean2: {:6.3f} , IS_std2: {:6.3f} , fid2: {:6.3f}'.format(inception_score1_m,
+                                                                                    inception_score1_s,fid1)
+                            logging.info(info_str)
+                            if inception_score2_m>best_IS2:
+                                best_IS2 = inception_score2_m
+                                info_str = 'bestIS : IS_mean: {:6.3f} , IS_std: {:6.3f} , fid: {:6.3f}'.format(
+                                    inception_score1_m,inception_score1_s,fid1)
+                                logging.info(info_str)
+
+                        else:
+                            inception_score2_m, inception_score2_s = 0,0
                         summary_str = sess.run(summary_op_3, {tf_inception_m1: inception_score1_m,
                                                               tf_inception_std1: inception_score1_s,
                                                               tf_inception_m2: inception_score2_m,
@@ -307,6 +325,8 @@ def main(args, logging):
                     if tensorboard_log and CALC_NDB and global_step % INCEPTION_FREQUENCY == INCEPTION_FREQUENCY - 1:
                         samples = get_samples(20000)
                         results = ndb_model.evaluate(samples)
+                        info_str = 'ndb: {:6.3f} '.format(results['NDB'])
+                        logging.info(info_str)
                         summary_str = sess.run(summary_op_4, {tf_ndb: results['NDB']})
                         summary_writer.add_summary(summary_str, global_step)
                         summary_writer.flush()
