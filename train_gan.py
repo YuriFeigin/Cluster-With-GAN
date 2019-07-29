@@ -177,6 +177,7 @@ def main(args, logging):
         tf_inception_std2 = tf.placeholder(tf.float32, shape=None)
         tf_fid = tf.placeholder(tf.float32, shape=None)
         tf_ndb = tf.placeholder(tf.float32, shape=None)
+        tf_ndb_js = tf.placeholder(tf.float32, shape=None)
         summary1 = utils_summary.summary_collection('col1')
         summary2 = utils_summary.summary_collection('col2')
         summary3 = utils_summary.summary_collection('col3')
@@ -197,6 +198,7 @@ def main(args, logging):
             summary3.add_summary_scalar(tf_inception_std2, 'incep_std')
             summary3.add_summary_scalar(tf_fid, 'fid')
             summary4.add_summary_scalar(tf_ndb, 'ndb')
+            summary4.add_summary_scalar(tf_ndb_js, 'ndb_js')
 
         # Function for generating samples
         if n_labels:
@@ -325,9 +327,9 @@ def main(args, logging):
                     if tensorboard_log and CALC_NDB and global_step % INCEPTION_FREQUENCY == INCEPTION_FREQUENCY - 1:
                         samples = get_samples(20000)
                         results = ndb_model.evaluate(samples)
-                        info_str = 'ndb: {:6.3f} '.format(results['NDB'])
+                        info_str = 'ndb: {:6.3f} , ndb_js: {:6.3f}'.format(results['NDB'],results['JS'])
                         logging.info(info_str)
-                        summary_str = sess.run(summary_op_4, {tf_ndb: results['NDB']})
+                        summary_str = sess.run(summary_op_4, {tf_ndb: results['NDB'],tf_ndb_js: results['JS']})
                         summary_writer.add_summary(summary_str, global_step)
                         summary_writer.flush()
 
