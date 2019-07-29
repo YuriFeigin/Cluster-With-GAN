@@ -34,7 +34,6 @@ def full(args,x_test,y_test):
             summary_ACC = tf.summary.scalar('ACC', ph_ACC)
             summary_NMI = tf.summary.scalar('NMI', ph_NMI)
             summary_ARI = tf.summary.scalar('ARI', ph_ARI)
-
         summary_op = tf.summary.merge_all()
         summary_writers = []
         data_all = []
@@ -43,10 +42,11 @@ def full(args,x_test,y_test):
         IndLabeldImgs = y_test != -1
         y_test = y_test[IndLabeldImgs]
         config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False)
+        last_iter = int(np.floor(args.max_iter / args.latent_iter) * args.latent_iter)
         with tf.Session(config=config) as sess:
             for Len in LengthSample:
                 summary_writers.append(tf.summary.FileWriter(os.path.join(args.data_path,'tb_Cluster'+str(Len))))
-            while True:  # for epoch
+            while CurIter < last_iter:  # for epoch
                 files = np.array(os.listdir(os.path.join(args.data_path,'latent')))
                 IterNumExist = np.array([int(f[6:-4]) for f in files])
                 IndAboveCur = IterNumExist > CurIter
@@ -77,6 +77,7 @@ def full(args,x_test,y_test):
                             logging.info(info_str)
                 else:
                     time.sleep(30)
+        logging.info('finish')
     except Exception:
         logging.exception('this is an exception')
 
@@ -136,13 +137,22 @@ if __name__ == "__main__":
         os.environ['PYTHONHASHSEED'] = str(args.seed)
         random.seed(args.seed)
     
-    # get dataset name
+    # get dataset params
     with open(os.path.join(args.data_path,'training.log'), 'r') as f:
+        i=0
         for line in f:
             if 'Argument dataset' in line:
                 args.dataset = line.strip().split()[-1]
+                i+=1
+            elif 'Argument max_iter' in line:
+                args.max_iter = line.strip().split()[-1]
+                i+=1
+            elif 'Argument save_latent_iter' in line:
+                args.latent_iter = line.strip().split()[-1]
+                i+=1
+            if i==3:
                 break
-                
+
     # get all images and labels
     dataset_eval = load_data.Load(args.dataset, 'all', shuffle=False,  batch_size=5000, img_size=None)
     next_element_eval = dataset_eval.get_full_next()

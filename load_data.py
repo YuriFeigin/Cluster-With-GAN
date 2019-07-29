@@ -310,6 +310,6 @@ class celeba(DataSet):
     def load_sub_imgs(self,sz):
         if self.is_init:
             imgs = np.random.permutation(self.imgs)[:sz]
-            images = np.stack([resize(io.imread(f)[40:188, 15:163, :], (64, 64), anti_aliasing=True)*255 for f in imgs])
+            images = np.stack([resize(io.imread(f)[40:188, 15:163, :], (self.img_size, self.img_size), anti_aliasing=True)*255 for f in imgs])
             return images
 

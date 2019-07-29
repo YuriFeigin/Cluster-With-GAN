@@ -25,6 +25,7 @@ def main(args, logging):
     tensorboard_log = args.tensorboard_log
     save_image_iter = args.save_image_iter
     save_latent_iter = args.save_latent_iter
+    save_latent_start = args.save_latent_start
 
     # choose model
     all_models = {'model1': model1, 'model2': model2, 'ALI_orig_celeba': ALI_orig_celeba,
@@ -146,7 +147,7 @@ def main(args, logging):
                     duration = time.time() - start_time
 
                     # -- save latent space -- #
-                    if global_step % save_latent_iter == 0:
+                    if global_step % save_latent_iter == 0 and global_step > save_latent_start:
                         dataset_eval.init_dataset(sess)
                         info_str = 'saving latent iter: ' + str(global_step)
                         logging.info(info_str)
@@ -206,6 +207,7 @@ if __name__ == "__main__":
     parser.add_argument('--dim_encoder', default=128, type=int, help='encoder dimension')
     parser.add_argument('--dim_discriminator', default=128, type=int, help='discriminator dimension')
     parser.add_argument('--z_len', default=64, type=int, help='length of the encoder latent space')
+    parser.add_argument('--save_latent_start', default=0, type=int, help='number of iteration to save latent space')
     parser.add_argument('--save_latent_iter', default=5000, type=int, help='number of iteration to save latent space')
     parser.add_argument('--save_image_iter', default=5000, type=int, help='number of iteration to save images')
     parser.add_argument('--save_images', default=True, type=bool, help='save images')
@@ -240,8 +242,9 @@ if __name__ == "__main__":
         p = subprocess.Popen("python cluster_analysis.py " + args.log_dir + " full",cwd=os.getcwd(),
                              shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     main(args, logging)
-    time.sleep(600)
-    p.kill()
-    # if args.calc_cluster:
-    #     (stdoutput, erroutput) = p.communicate(timeout=600)
-    #     print(stdoutput)
+
+    if args.calc_cluster:
+        (stdoutput, erroutput) = p.communicate()
+        print(stdoutput)
+        # time.sleep(600)
+        # p.kill()
