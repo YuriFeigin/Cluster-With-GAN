@@ -71,21 +71,31 @@ class DataSet:
         self.next_element = self.iterator.get_next()
 
     def set_clustring(self, path, n_clusters):
+        print('start calculate clustering')
         np_data = []
-        for i in range(455000, 500001, 5000):
-            files = os.path.join(path, 'latent', 'latent' + str(i) + '.npz')
-            np_data.append(np.load(files)['latent'])
+        files = np.array(os.listdir(os.path.join(path, 'latent')))
+        IterNumExist = np.array([int(f[6:-4]) for f in files])
+        ind = np.argsort(IterNumExist)[-10:]
+        for i in ind:
+            file = os.path.join(path,'latent', files[i])
+            np_data.append(np.load(file)['latent'])
         X = np.concatenate(np_data, 1)
         kmeans = KMeans(n_clusters=n_clusters, precompute_distances=True, n_jobs=32)
         kmeans.fit(X)
         self.labels = kmeans.labels_
         _, self.label_dist = np.unique(self.labels, return_counts=True)
+        self.label_dist = self.label_dist / self.label_dist.sum()
+        print('end calculate clustering')
 
     def set_sub_clustring(self, path, n_clusters):
+        print('start calculate clustering')
         np_data = []
-        for i in range(455000, 500001, 5000):
-            files = os.path.join(path, 'latent', 'latent' + str(i) + '.npz')
-            np_data.append(np.load(files)['latent'])
+        files = np.array(os.listdir(os.path.join(path, 'latent')))
+        IterNumExist = np.array([int(f[6:-4]) for f in files])
+        ind = np.argsort(IterNumExist)[-10:]
+        for i in ind:
+            file = os.path.join(path,'latent', files[i])
+            np_data.append(np.load(file)['latent'])
         X = np.concatenate(np_data, 1)
 
         y_pred = self.labels.copy()
@@ -96,6 +106,8 @@ class DataSet:
             y_pred[self.labels == l] = kmeans.labels_ + i * n_clusters
         self.labels = y_pred
         _, self.label_dist = np.unique(self.labels, return_counts=True)
+        self.label_dist = self.label_dist / self.label_dist.sum()
+        print('end calculate clustering')
 
     def load_sub_imgs(self,sz):
         if self.is_init:
