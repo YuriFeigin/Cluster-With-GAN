@@ -10,7 +10,7 @@ def x_generator1(in_,labels,DIM,is_training,image_size, reuse):
         output = tf.layers.dense(in_, cur_size*cur_size*DIM, name='Input')
         output = tf.reshape(output, [-1, cur_size, cur_size, DIM])
         i=1
-        while cur_size!=image_size[0]:
+        while cur_size != image_size[0]:
             output = ResidualBlock_Up('ResidualBlock_Up.'+str(i), DIM, 3,is_training, inputs=output, labels=labels)
             cur_size = output.get_shape().as_list()[1]
             i += 1

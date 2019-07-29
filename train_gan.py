@@ -202,13 +202,13 @@ def main(args, logging):
 
         # Function for generating samples
         if n_labels:
-            fixed_noise = tf.constant(np.random.normal(size=(n_labels ** 2, 128)).astype('float32'))
+            fixed_noise = tf.constant(np.random.normal(size=(n_labels ** 2, args.z_len)).astype('float32'))
             fixed_labels = tf.constant(np.array(list(range(0, n_labels)) * n_labels, dtype='int32'))
             fixed_noise_samples = model.Generator(n_labels ** 2, args.DIM_G, args.z_len, [fixed_labels, n_labels], is_training=True,
                                                   image_size=image_size, reuse=True, noise=fixed_noise)
             summary2.add_summary_image1(fixed_noise_samples, n_labels ** 2, 'Sam')
         else:
-            fixed_noise = tf.constant(np.random.normal(size=(10 ** 2, 128)).astype('float32'))
+            fixed_noise = tf.constant(np.random.normal(size=(10 ** 2, args.z_len)).astype('float32'))
             fixed_noise_samples = model.Generator(10 ** 2, args.DIM_G, args.z_len, [None, None], is_training=True, image_size=image_size,
                                                   reuse=True, noise=fixed_noise)
             summary2.add_summary_image1(fixed_noise_samples, 10 ** 2, 'Sam')
@@ -255,7 +255,6 @@ def main(args, logging):
         ep = -1
         global_step = -1
         best_IS1 = -1
-        best_IS2 = -1
         while global_step<max_iter:  # for epoch
             dataset_train.init_dataset(sess)
             ep += 1
@@ -309,12 +308,6 @@ def main(args, logging):
                             info_str = 'IS_mean2: {:6.3f} , IS_std2: {:6.3f} , fid2: {:6.3f}'.format(inception_score1_m,
                                                                                     inception_score1_s,fid1)
                             logging.info(info_str)
-                            if inception_score2_m>best_IS2:
-                                best_IS2 = inception_score2_m
-                                info_str = 'bestIS : IS_mean: {:6.3f} , IS_std: {:6.3f} , fid: {:6.3f}'.format(
-                                    inception_score1_m,inception_score1_s,fid1)
-                                logging.info(info_str)
-
                         else:
                             inception_score2_m, inception_score2_s = 0,0
                         summary_str = sess.run(summary_op_3, {tf_inception_m1: inception_score1_m,
