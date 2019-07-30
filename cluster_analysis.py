@@ -42,7 +42,7 @@ def full(args,x_test,y_test):
         IndLabeldImgs = y_test != -1
         y_test = y_test[IndLabeldImgs]
         config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False)
-        last_iter = int(np.floor(args.max_iter / args.latent_iter) * args.latent_iter)
+        last_iter = int(np.floor(float(args.max_iter) / float(args.latent_iter)) * float(args.latent_iter))
         with tf.Session(config=config) as sess:
             for Len in LengthSample:
                 summary_writers.append(tf.summary.FileWriter(os.path.join(args.data_path,'tb_Cluster'+str(Len))))

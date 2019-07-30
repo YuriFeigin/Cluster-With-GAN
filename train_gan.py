@@ -360,7 +360,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', default=-1, type=int, help='the seed of the network initial')
     parser.add_argument('--lr', default=2e-4, type=float, help='Initial learning rate')
     parser.add_argument('--DECAY', default=True, type=bool, help='Whether to decay LR over learning')
-    parser.add_argument('--batch_size', default=128, type=int, help='')
+    parser.add_argument('--batch_size', default=64, type=int, help='')
     parser.add_argument('--DIM_G', default=128, type=int, help='Generator dimensionality')
     parser.add_argument('--DIM_D', default=128, type=int, help='Critic dimensionality')
     parser.add_argument('--z_len', default=128, type=int, help='length of the encoder latent space')
