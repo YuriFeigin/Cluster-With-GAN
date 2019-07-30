@@ -48,7 +48,7 @@ def main(args, logging):
         n_labels = None
     elif args.label == 'clustering':
         n_labels = args.n_clusters
-        dataset_train.set_clustring(args.clustering_path,n_labels)
+        dataset_train.set_clustring(args.clustering_path,n_labels, args.n_cluster_hist)
     elif args.label == 'sup':
         n_labels = dataset_train.num_classes
 
@@ -351,6 +351,7 @@ if __name__ == "__main__":
     parser.add_argument('label', choices=['unsup', 'sup', 'clustering'], type=str, help='choose dataset')
     parser.add_argument('--clustering_path', type=str, help='clustering path')
     parser.add_argument('--n_clusters',default=40, type=int, help='number of clusters')
+    parser.add_argument('--n_cluster_hist',default=10, type=int, help='number of latent space to be used from history')
     parser.add_argument('--train_on', default='train', choices=['train', 'test', 'all'], type=str,
                         help='on which images to train')
     parser.add_argument('--img_size', default=None, type=int, help='the seed of the network initial')

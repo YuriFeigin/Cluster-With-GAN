@@ -70,12 +70,12 @@ class DataSet:
         self.iterator = dataset.make_initializable_iterator()
         self.next_element = self.iterator.get_next()
 
-    def set_clustring(self, path, n_clusters):
+    def set_clustring(self, path, n_clusters,n_cluster_hist):
         print('start calculate clustering')
         np_data = []
         files = np.array(os.listdir(os.path.join(path, 'latent')))
         IterNumExist = np.array([int(f[6:-4]) for f in files])
-        ind = np.argsort(IterNumExist)[-10:]
+        ind = np.argsort(IterNumExist)[-n_cluster_hist:]
         for i in ind:
             file = os.path.join(path,'latent', files[i])
             np_data.append(np.load(file)['latent'])
