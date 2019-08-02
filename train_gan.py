@@ -260,7 +260,7 @@ def main(args, logging):
             ep += 1
             it_per_epoch = it_in_epoch if it != -1 else -1
             it_in_epoch = 0
-            while True:  # for iter in epoch
+            while global_step<max_iter:  # for iter in epoch
                 try:
                     x, y = sess.run(next_element_train)
                     start_time = time.time()

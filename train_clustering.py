@@ -146,6 +146,18 @@ def main(args, logging):
                         g_loss, _, _ = sess.run([gen_loss, gen_train_op, update_ops], {input_x: x, sam_z: z})
                     duration = time.time() - start_time
 
+                    # -- save log -- #
+                    if global_step % log_iter == 0:
+                        examples_per_sec = batch_size / float(duration)
+                        info_str = '{}: Epoch: {:3d} ({:5d}/{:5d}), global_setp {:6d}, d_loss = {:.2f},g_loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch)'.format(
+                            datetime.now(), ep, it_in_epoch, it_per_epoch, global_step, d_loss, g_loss,
+                            examples_per_sec, duration)
+                        logging.info(info_str)
+                        print('\r', info_str, end='', flush=True)
+                        if tensorboard_log:
+                            summary_str = sess.run(summary_op_1, {input_x: x, sam_z: z})
+                            summary_writer.add_summary(summary_str, global_step)
+
                     # -- save latent space -- #
                     if global_step % save_latent_iter == 0 and global_step > save_latent_start:
                         dataset_eval.init_dataset(sess)
@@ -164,17 +176,6 @@ def main(args, logging):
                         np.savez(os.path.join(args.log_dir, 'latent', 'latent' + str(global_step) + '.npz'),
                                  latent=np.concatenate(t_eval_z, 0),latent_flip=np.concatenate(t_eval_z_flip, 0))
 
-                    # -- save log -- #
-                    if global_step % log_iter == 0:
-                        examples_per_sec = batch_size / float(duration)
-                        info_str = '{}: Epoch: {:3d} ({:5d}/{:5d}), global_setp {:6d}, d_loss = {:.2f},g_loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch)'.format(
-                            datetime.now(), ep, it_in_epoch, it_per_epoch, global_step, d_loss, g_loss,
-                            examples_per_sec, duration)
-                        logging.info(info_str)
-                        print('\r', info_str, end='', flush=True)
-                        if tensorboard_log:
-                            summary_str = sess.run(summary_op_1, {input_x: x, sam_z: z})
-                            summary_writer.add_summary(summary_str, global_step)
 
                     # -- save images -- #
                     if tensorboard_log and global_step % save_image_iter == 0:
