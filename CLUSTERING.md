@@ -48,4 +48,7 @@ python train_clustering.py celeba ./results/clustering/celeba --architecture ALI
 ```
 
 
- 
+ ```
+tensorboard --logdir ./cache/tsne
+```
+
