@@ -125,6 +125,7 @@ def draw(args,x_test,y_test):
         img[shape[1] * i:shape[1] * (i + 1), :] = np.reshape(np.transpose(x_test[ind], [1, 0, 2, 3]),
                                                              [shape[1], shape[2] * 10, shape[3]]) / 255
     plt.imshow(img)
+    plt.show()
 
 def tsne(args,x_test,y_test):
     ind = np.random.permutation(y_test.shape[0])[:10000]
