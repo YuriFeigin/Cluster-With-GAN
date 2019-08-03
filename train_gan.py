@@ -19,12 +19,6 @@ import utils.inception_score as inception_score
 import utils.ndb as ndb
 
 
-# if dataset == 'celeba':
-#     dataset_eval = 'test'
-#     z_len = 512
-
-
-
 def main(args, logging):
     # get frequently argument
     batch_size = args.batch_size
@@ -35,6 +29,9 @@ def main(args, logging):
     CALC_INCEPTION = args.calc_is_and_fid
     CALC_NDB = args.calc_ndb
     INCEPTION_FREQUENCY = args.INCEPTION_FREQUENCY
+    NDB_FREQUENCY = args.NDB_FREQUENCY
+
+    batch_size_gen = args.GEN_BS_MULTIPLE * batch_size
 
     # choose model
     all_models = {'model1': model1, 'model2': model2}
@@ -44,13 +41,6 @@ def main(args, logging):
     next_element_train = dataset_train.get_full_next()
     image_size = [dataset_train.img_size,dataset_train.img_size,next_element_train[0].shape.as_list()[-1]]
 
-    if args.label == 'unsup':
-        n_labels = None
-    elif args.label == 'clustering':
-        n_labels = args.n_clusters
-        dataset_train.set_clustring(args.clustering_path,n_labels, args.n_cluster_hist)
-    elif args.label == 'sup':
-        n_labels = dataset_train.num_classes
 
     dataset_train._init_dataset()
     TrainData = dataset_train.load_sub_imgs(80000)
@@ -58,6 +48,34 @@ def main(args, logging):
         inception_score.update_fid_mean(TrainData)
     if CALC_NDB:
         ndb_model = ndb.NDB(TrainData, max_dims=2000, semi_whitening=True)
+
+
+    if args.label == 'unsup':
+        n_labels = None
+        fake_labels1 = tf.placeholder(tf.int32,None) # false variable
+        fake_labels2 = tf.placeholder(tf.int32,None) # false variable
+        fixed_imgs_len = 10 ** 2
+        fixed_noise = tf.constant(np.random.normal(size=(fixed_imgs_len, args.z_len)).astype(np.float32))
+        fixed_labels = fake_labels2 = tf.placeholder(tf.int32,None) # false variable
+        fake_labels_100 = None
+    else:
+        if args.label == 'clustering':
+            n_labels = args.n_clusters
+            dataset_train.set_clustring(args.clustering_path, n_labels, args.n_cluster_hist)
+        elif args.label == 'sup':
+            n_labels = dataset_train.num_classes
+        fake_labels1 = tf.cast(tf.random_uniform([batch_size]) * n_labels, tf.int32)
+        fake_labels2 = tf.cast(tf.random_uniform([batch_size_gen]) * n_labels, tf.int32)
+        fixed_imgs_len = n_labels ** 2
+        fixed_noise = tf.constant(np.random.normal(size=(fixed_imgs_len, args.z_len)).astype(np.float32))
+        fixed_labels = tf.constant(np.array(list(range(0, n_labels)) * n_labels, dtype=np.int32))
+
+        # fake_labels_100 = tf.cast(tf.random_uniform([100])*n_labels, tf.int32)
+        prob = dataset_train.get_label_dist()
+        fake_labels_100 = tf.py_func(np.random.choice, [np.arange(n_labels), 100, True, prob], tf.int64)
+        fake_labels_100.set_shape(100)
+
+
 
     
     _iteration = tf.placeholder(tf.int32, shape=None)
@@ -80,7 +98,7 @@ def main(args, logging):
 
     # Discriminator
     real_and_fake_data = tf.concat([all_real_data, all_fake_data], axis=0)
-    real_and_fake_labels = tf.concat([all_real_labels, all_real_labels], axis=0)
+    real_and_fake_labels = tf.concat([all_real_labels, fake_labels1], axis=0)
     disc_all, disc_all_2, disc_all_acgan = model.Discriminator(real_and_fake_data, args.DIM_D, [real_and_fake_labels, n_labels],
                                                                is_training=True, image_size=image_size, reuse=False)
 
@@ -113,13 +131,8 @@ def main(args, logging):
     disc_costs.append(CT_)
 
     # train the generator
-    n_samples = args.GEN_BS_MULTIPLE * batch_size
-    if n_labels is None:
-        fake_labels = None
-    else:
-        fake_labels = tf.cast(tf.random_uniform([n_samples]) * n_labels, tf.int32)
-    x = model.Generator(n_samples, args.DIM_G, args.z_len, [fake_labels, n_labels], is_training=True, image_size=image_size, reuse=True)
-    disc_fake, disc_fake_2, disc_fake_acgan = model.Discriminator(x, args.DIM_D, [fake_labels, n_labels],
+    x = model.Generator(batch_size_gen, args.DIM_G, args.z_len, [fake_labels2,n_labels], is_training=True, image_size=image_size, reuse=True)
+    disc_fake, disc_fake_2, disc_fake_acgan = model.Discriminator(x, args.DIM_D, [fake_labels2,n_labels],
                                                                   is_training=True, image_size=image_size, reuse=True)
     gen_costs.append(-tf.reduce_mean(disc_fake))
 
@@ -140,7 +153,7 @@ def main(args, logging):
                 tf.to_int32(tf.argmax(disc_all_acgan_fake, axis=1)), all_real_labels), tf.float32)
         ))
         gen_acgan_costs.append(tf.reduce_mean(
-            tf.nn.sparse_softmax_cross_entropy_with_logits(logits=disc_fake_acgan, labels=fake_labels)
+            tf.nn.sparse_softmax_cross_entropy_with_logits(logits=disc_fake_acgan, labels=fake_labels2)
         ))
         disc_acgan = tf.add_n(disc_acgan_costs)
         disc_acgan_acc = tf.add_n(disc_acgan_accs)
@@ -201,17 +214,10 @@ def main(args, logging):
             summary4.add_summary_scalar(tf_ndb_js, 'ndb_js')
 
         # Function for generating samples
-        if n_labels:
-            fixed_noise = tf.constant(np.random.normal(size=(n_labels ** 2, args.z_len)).astype('float32'))
-            fixed_labels = tf.constant(np.array(list(range(0, n_labels)) * n_labels, dtype='int32'))
-            fixed_noise_samples = model.Generator(n_labels ** 2, args.DIM_G, args.z_len, [fixed_labels, n_labels], is_training=True,
-                                                  image_size=image_size, reuse=True, noise=fixed_noise)
-            summary2.add_summary_image1(fixed_noise_samples, n_labels ** 2, 'Sam')
-        else:
-            fixed_noise = tf.constant(np.random.normal(size=(10 ** 2, args.z_len)).astype('float32'))
-            fixed_noise_samples = model.Generator(10 ** 2, args.DIM_G, args.z_len, [None, None], is_training=True, image_size=image_size,
-                                                  reuse=True, noise=fixed_noise)
-            summary2.add_summary_image1(fixed_noise_samples, 10 ** 2, 'Sam')
+        fixed_noise_samples = model.Generator(fixed_imgs_len, args.DIM_G, args.z_len, [fixed_labels, n_labels], is_training=True,
+                                              image_size=image_size, reuse=True, noise=fixed_noise)
+        summary2.add_summary_image1(fixed_noise_samples, fixed_imgs_len, 'Sam')
+
 
         summary_op_1 = tf.summary.merge(summary1.get_summary())
         summary_op_2 = tf.summary.merge(summary2.get_summary())
@@ -219,15 +225,8 @@ def main(args, logging):
         summary_op_4 = tf.summary.merge(summary4.get_summary())
 
     # Function for calculating inception score
-    if n_labels:
-        # fake_labels_100 = tf.cast(tf.random_uniform([100])*n_labels, tf.int32)
-        prob = dataset_train.get_label_dist()
-        fake_labels_100 = tf.py_func(np.random.choice, [np.arange(n_labels), 100, True, prob], tf.int64)
-        fake_labels_100.set_shape(100)
-        samples_100 = model.Generator(100, args.DIM_G, args.z_len, [fake_labels_100, n_labels], is_training=True, image_size=image_size,
-                                      reuse=True)
-    else:
-        samples_100 = model.Generator(100, args.DIM_G, args.z_len, [None, None], is_training=True, image_size=image_size, reuse=True)
+    samples_100 = model.Generator(100, args.DIM_G, args.z_len, [fake_labels_100, n_labels], is_training=True, image_size=image_size,
+                                  reuse=True)
 
     with tf.Session() as sess:
         def get_samples(n):
@@ -240,7 +239,7 @@ def main(args, logging):
 
 
         sess.run(tf.global_variables_initializer())
-        saver = tf.train.Saver(tf.global_variables())
+        # saver = tf.train.Saver(tf.global_variables())
 
         # ckpt_state = tf.train.get_checkpoint_state(os.path.join(log_dir,'ckpt'))
         # if ckpt_state and ckpt_state.model_checkpoint_path:
@@ -255,16 +254,14 @@ def main(args, logging):
         ep = -1
         global_step = -1
         best_IS1 = -1
-        while global_step<max_iter:  # for epoch
+        while global_step<=max_iter:  # for epoch
             dataset_train.init_dataset(sess)
             ep += 1
             it_per_epoch = it_in_epoch if it != -1 else -1
             it_in_epoch = 0
-            while global_step<max_iter:  # for iter in epoch
+            while global_step<=max_iter:  # for iter in epoch
                 try:
-                    x, y = sess.run(next_element_train)
                     start_time = time.time()
-
                     _ = sess.run([gen_train_op], feed_dict={_iteration: global_step})
                     for i in range(N_CRITIC):
                         x, y = sess.run(next_element_train)
@@ -295,7 +292,7 @@ def main(args, logging):
                         summary_writer.add_summary(summary_str, global_step)
                         summary_writer.flush()
 
-                    if tensorboard_log and CALC_INCEPTION and global_step % INCEPTION_FREQUENCY == INCEPTION_FREQUENCY - 1:
+                    if tensorboard_log and CALC_INCEPTION and global_step % INCEPTION_FREQUENCY == 0:
                         samples1 = get_samples(50000)
                         inception_score1_m, inception_score1_s, fid1 = inception_score.calc_scores(samples1)
                         info_str = 'IS_mean: {:6.3f} , IS_std: {:6.3f} , fid: {:6.3f}'.format(inception_score1_m,
@@ -317,7 +314,8 @@ def main(args, logging):
                                                               tf_fid: fid1})
                         summary_writer.add_summary(summary_str, global_step)
                         summary_writer.flush()
-                    if tensorboard_log and CALC_NDB and global_step % INCEPTION_FREQUENCY == INCEPTION_FREQUENCY - 1:
+
+                    if tensorboard_log and CALC_NDB and global_step % NDB_FREQUENCY == 0:
                         samples = get_samples(20000)
                         results = ndb_model.evaluate(samples)
                         info_str = 'ndb: {:6.3f} , ndb_js: {:6.3f}'.format(results['NDB'],results['JS'])
@@ -377,7 +375,7 @@ if __name__ == "__main__":
     parser.add_argument('--INCEPTION_FREQUENCY', default=5000, type=int, help=' How frequently to calculate NDB')
     parser.add_argument('--NDB_FREQUENCY', default=5000, type=int, help=' How frequently to calculate Inception score')
     parser.add_argument('--calc_is_and_fid', default=True, type=bool, help=' whether to calculate ndb ')
-    parser.add_argument('--calc_ndb', default=True, type=bool, help=' whether to calculate inseption score and fid ')
+    parser.add_argument('--calc_ndb', default=False, type=bool, help=' whether to calculate inseption score and fid ')
     parser.add_argument('--save_images', default=True, type=bool, help='save images')
     parser.add_argument('--log_iter', default=20, type=int, help='number of iteration to save log')
     parser.add_argument('--tensorboard_log', default=True, type=bool, help='create tensorboard logs')
