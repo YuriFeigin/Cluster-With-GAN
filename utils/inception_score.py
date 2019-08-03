@@ -20,28 +20,25 @@ pool3 = None
 pool3_mean_real = None
 pool3_std_real = None
 
-
 # Call this function with list of images. Each of elements should be a
 # numpy array with values ranging from 0 to 255.
 def get_features(images):
-    if softmax is None:
-        _init_inception()
     assert ((images.shape[3]) == 3)
     assert (np.max(images) > 10)
     assert (np.min(images) >= 0.0)
     images = images.astype(np.float32)
     bs = 100
-    with tf.Session() as sess:
-        preds = []
-        feats = []
-        for inp in np.array_split(images, round(images.shape[0] / bs)):
-            # sys.stdout.write(".")
-            # sys.stdout.flush()
-            [feat, pred] = sess.run([pool3, softmax], {'InputTensor:0': inp})
-            feats.append(feat.reshape(-1, 2048))
-            preds.append(pred)
-        feats = np.concatenate(feats, 0)
-        preds = np.concatenate(preds, 0)
+    sess = tf.get_default_session()
+    preds = []
+    feats = []
+    for inp in np.array_split(images, round(images.shape[0] / bs)):
+        # sys.stdout.write(".")
+        # sys.stdout.flush()
+        [feat, pred] = sess.run([pool3, softmax], {'InputTensor:0': inp})
+        feats.append(feat.reshape(-1, 2048))
+        preds.append(pred)
+    feats = np.concatenate(feats, 0)
+    preds = np.concatenate(preds, 0)
     return preds, feats
 
 
@@ -148,7 +145,7 @@ def _init_inception():
         statinfo = os.stat(filepath)
         print('Succesfully downloaded', filename, statinfo.st_size, 'bytes.')
     tarfile.open(filepath, 'r:gz').extractall(MODEL_DIR)
-    with tf.gfile.FastGFile(os.path.join(
+    with tf.gfile.GFile(os.path.join(
             MODEL_DIR, 'classify_image_graph_def.pb'), 'rb') as f:
         graph_def = tf.GraphDef()
         graph_def.ParseFromString(f.read())
@@ -156,13 +153,13 @@ def _init_inception():
         # batch size.
         input_tensor = tf.placeholder(tf.float32, shape=[None, None, None, 3],
                                       name='InputTensor')
-        _ = tf.import_graph_def(graph_def, name='',
+        _ = tf.import_graph_def(graph_def, name='inception_v3',
                                 input_map={'ExpandDims:0': input_tensor})
     # Works with an arbitrary minibatch size.
-    with tf.Session() as sess:
-        pool3 = sess.graph.get_tensor_by_name('pool_3:0')
-        ops = pool3.graph.get_operations()
-        for op_idx, op in enumerate(ops):
+    pool3 = tf.get_default_graph().get_tensor_by_name('inception_v3/pool_3:0')
+    ops = pool3.graph.get_operations()
+    for op_idx, op in enumerate(ops):
+        if 'inception_v3' in op.name:
             for o in op.outputs:
                 shape = o.get_shape()
                 shape = [s.value for s in shape]
@@ -173,6 +170,8 @@ def _init_inception():
                     else:
                         new_shape.append(s)
                 o.set_shape(tf.TensorShape(new_shape))
-        w = sess.graph.get_operation_by_name("softmax/logits/MatMul").inputs[1]
-        logits = tf.matmul(tf.squeeze(pool3, [1, 2]), w)
-        softmax = tf.nn.softmax(logits)
+    w = tf.get_default_graph().get_operation_by_name("inception_v3/softmax/logits/MatMul").inputs[1]
+    logits = tf.matmul(tf.squeeze(pool3, [1, 2]), w)
+    softmax = tf.nn.softmax(logits)
+
+_init_inception()

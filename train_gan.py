@@ -36,18 +36,11 @@ def main(args, logging):
     # choose model
     all_models = {'model1': model1, 'model2': model2}
     model = all_models.get(args.architecture)
-
-    dataset_train = load_data.Load(args.dataset, args.train_on, shuffle=True, batch_size=batch_size,img_size=args.img_size)
+    
+    with tf.variable_scope("Train_Data_Input", reuse=False) as scope:
+        dataset_train = load_data.Load(args.dataset, args.train_on, shuffle=True, batch_size=batch_size,img_size=args.img_size)
     next_element_train = dataset_train.get_full_next()
     image_size = [dataset_train.img_size,dataset_train.img_size,next_element_train[0].shape.as_list()[-1]]
-
-
-    dataset_train._init_dataset()
-    TrainData = dataset_train.load_sub_imgs(80000)
-    if CALC_INCEPTION:
-        inception_score.update_fid_mean(TrainData)
-    if CALC_NDB:
-        ndb_model = ndb.NDB(TrainData, max_dims=2000, semi_whitening=True)
 
 
     if args.label == 'unsup':
@@ -74,8 +67,6 @@ def main(args, logging):
         prob = dataset_train.get_label_dist()
         fake_labels_100 = tf.py_func(np.random.choice, [np.arange(n_labels), 100, True, prob], tf.int64)
         fake_labels_100.set_shape(100)
-
-
 
     
     _iteration = tf.placeholder(tf.int32, shape=None)
@@ -237,8 +228,15 @@ def main(args, logging):
             all_samples = ((all_samples + 1.) * (255.99 / 2)).astype('int32')
             return all_samples
 
+        dataset_train._init_dataset()
+        TrainData = dataset_train.load_sub_imgs(80000)
+        if CALC_INCEPTION:
+            inception_score.update_fid_mean(TrainData)
+        if CALC_NDB:
+            ndb_model = ndb.NDB(TrainData, max_dims=2000, semi_whitening=True)
 
         sess.run(tf.global_variables_initializer())
+
         # saver = tf.train.Saver(tf.global_variables())
 
         # ckpt_state = tf.train.get_checkpoint_state(os.path.join(log_dir,'ckpt'))
@@ -293,6 +291,7 @@ def main(args, logging):
                         summary_writer.flush()
 
                     if tensorboard_log and CALC_INCEPTION and global_step % INCEPTION_FREQUENCY == 0:
+                        print('\r', 'calculate inception scrore and FID', end='', flush=True)
                         samples1 = get_samples(50000)
                         inception_score1_m, inception_score1_s, fid1 = inception_score.calc_scores(samples1)
                         info_str = 'IS_mean: {:6.3f} , IS_std: {:6.3f} , fid: {:6.3f}'.format(inception_score1_m,
@@ -316,6 +315,7 @@ def main(args, logging):
                         summary_writer.flush()
 
                     if tensorboard_log and CALC_NDB and global_step % NDB_FREQUENCY == 0:
+                        print('\r', 'calculate NDB', end='', flush=True)
                         samples = get_samples(20000)
                         results = ndb_model.evaluate(samples)
                         info_str = 'ndb: {:6.3f} , ndb_js: {:6.3f}'.format(results['NDB'],results['JS'])
