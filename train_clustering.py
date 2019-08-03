@@ -165,24 +165,20 @@ def main(args, logging):
                         logging.info(info_str)
                         print('\r', info_str, end='', flush=True)
                         t_eval_z = []
-                        t_eval_z_flip = []
                         while True:
                             try:
                                 t_x = sess.run(next_element_eval)
                                 t_eval_z.append(z_eval.eval({input_x_eval: t_x}))
-                                t_eval_z_flip.append(z_eval.eval({input_x_eval: np.flip(t_x,2)}))
                             except tf.errors.OutOfRangeError:
                                 break
                         np.savez(os.path.join(args.log_dir, 'latent', 'latent' + str(global_step) + '.npz'),
-                                 latent=np.concatenate(t_eval_z, 0),latent_flip=np.concatenate(t_eval_z_flip, 0))
-
+                                 latent=np.concatenate(t_eval_z, 0))
 
                     # -- save images -- #
                     if tensorboard_log and global_step % save_image_iter == 0:
                         summary_str = sess.run(summary_op_2, {input_x: x, sam_z: z})
                         summary_writer.add_summary(summary_str, global_step)
                         summary_writer.flush()
-
 
                     global_step += 1
                     it += 1
