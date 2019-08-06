@@ -301,8 +301,8 @@ def main(args, logging):
                             best_IS1 = inception_score1_m
                             samples1 = get_samples(50000)
                             inception_score2_m, inception_score2_s, fid2 = inception_score.calc_scores(samples1)
-                            info_str = 'IS_mean2: {:6.3f} , IS_std2: {:6.3f} , fid2: {:6.3f}'.format(inception_score1_m,
-                                                                                    inception_score1_s,fid1)
+                            info_str = 'IS_mean2: {:6.3f} , IS_std2: {:6.3f} , fid2: {:6.3f}'.format(inception_score2_m,
+                                                                                    inception_score2_s,fid2)
                             logging.info(info_str)
                         else:
                             inception_score2_m, inception_score2_s = 0,0
