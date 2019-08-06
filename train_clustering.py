@@ -15,6 +15,15 @@ import models.ALI.ALI_orig_celeba as ALI_orig_celeba
 import models.ALI.ALI_orig_cifar10 as ALI_orig_cifar10
 import utils.utils_summary as utils_summary
 
+def Iter_Train(data,batch_size=100):
+    while True:
+        data = np.random.permutation(data)
+        num_batches = int(np.floor(data.shape[0]/batch_size))
+        max_sz = num_batches*batch_size
+        data1 = data[:max_sz]
+        data1 = np.split(data1,num_batches)
+        for d in data1:
+            yield d
 
 def main(args, logging):
     # get frequently argument
@@ -139,7 +148,12 @@ def main(args, logging):
                 try:
                     # -- train network -- #
                     x = sess.run(next_element_train)
-                    z = np.random.normal(size=(batch_size, z_len))
+                    if global_step == 300000+1:
+                        z_n = Iter_Train(np.concatenate(t_eval_z, 0),batch_size)
+                    if global_step < 300000+2:
+                        z = np.random.normal(size=(batch_size, z_len))
+                    else:
+                        z = z_n.__next__()
                     start_time = time.time()
                     d_loss, _ = sess.run([disc_loss, disc_train_op], {input_x: x, sam_z: z})
                     for i in range(1):
