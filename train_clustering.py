@@ -1,11 +1,14 @@
 import os
-import subprocess
+import threading
+import collections
 import argparse
 import logging
 import time
 from datetime import datetime
 import random
 import numpy as np
+from sklearn import metrics
+from sklearn.cluster import KMeans
 import tensorflow as tf
 
 import load_data
@@ -14,6 +17,27 @@ import models.ALI.model2 as model2
 import models.ALI.ALI_orig_celeba as ALI_orig_celeba
 import models.ALI.ALI_orig_cifar10 as ALI_orig_cifar10
 import utils.utils_summary as utils_summary
+import utils.utils as utils
+
+cluster_sz = [1, 5, 10]
+
+def calc_cluster(sess,all_latent,labels,clustering_algo,global_step,summary_writers,
+                                     summary_op,ph_ACC,ph_NMI,ph_ARI,logging):
+    ind_labeld_imgs = labels != -1
+    labels = labels[ind_labeld_imgs]
+    info_str = 'Calculate Clustering'
+    for i, hist_len in enumerate(cluster_sz):
+        if len(all_latent) >= hist_len:
+            clustering_algo.fit(np.concatenate(all_latent[-hist_len:], 1))
+            y_pred = clustering_algo.labels_[ind_labeld_imgs]
+            acc = utils.ACC(labels, y_pred)[0]
+            nmi = metrics.normalized_mutual_info_score(labels, y_pred, 'geometric')
+            ari = metrics.adjusted_rand_score(labels, y_pred)
+            summary_str = sess.run(summary_op, {ph_ACC: acc, ph_NMI: nmi, ph_ARI: ari})  #
+            summary_writers[i].add_summary(summary_str, global_step)
+            summary_writers[i].flush()
+            info_str += '\nHistory length: {:5d}  ,ACC:{:.3f} , NMI:{:.3f}, ARI{:.3f}'.format(hist_len, acc, nmi, ari)
+    logging.info(info_str)
 
 
 def main(args, logging):
@@ -24,8 +48,18 @@ def main(args, logging):
     max_iter = args.max_iter
     tensorboard_log = args.tensorboard_log
     save_image_iter = args.save_image_iter
-    save_latent_iter = args.save_latent_iter
-    save_latent_start = args.save_latent_start
+    calc_cluster_flag = args.calc_cluster
+    cluster_sample = args.cluster_sample
+
+    # prepare for saving latent space
+    os.makedirs(os.path.join(args.log_dir, 'latent'), exist_ok=True)
+    max_hist = max(cluster_sz)
+    latent_samples_iter = np.arange(0, max_iter + 1, args.cluster_sample)[:, np.newaxis] - \
+                          np.arange(0, max_hist * args.cluster_gap, args.cluster_gap)[np.newaxis, :]
+    latent_samples_iter = np.unique(latent_samples_iter)
+    latent_samples_iter = latent_samples_iter[latent_samples_iter >= 0]
+    latent_samples_iter = list(latent_samples_iter)
+    latent_queue = collections.deque(maxlen=max_hist)
 
     # choose model
     all_models = {'model1': model1, 'model2': model2, 'ALI_orig_celeba': ALI_orig_celeba,
@@ -33,14 +67,15 @@ def main(args, logging):
     model = all_models.get(args.architecture)
 
     # prepare data
-    dataset_train = load_data.Load(args.dataset, args.train_on, shuffle=True, batch_size=batch_size, img_size=args.img_size)
+    dataset_train = load_data.Load(args.dataset, args.train_on, shuffle=True, batch_size=batch_size,
+                                   img_size=args.img_size)
     next_element_train = dataset_train.get_imgs_next()
-    dataset_eval = load_data.Load(args.dataset, 'all', shuffle=False, batch_size=500,img_size=args.img_size)
-    next_element_eval = dataset_eval.get_imgs_next()
-    image_size = [dataset_train.img_size,dataset_train.img_size,next_element_eval.shape.as_list()[-1]]
+    dataset_eval = load_data.Load(args.dataset, 'all', shuffle=False, batch_size=500, img_size=args.img_size)
+    next_element_eval = dataset_eval.get_full_next()
+    image_size = [dataset_train.img_size, dataset_train.img_size, next_element_train.shape.as_list()[-1]]
 
     # define inputs
-    input_x = tf.placeholder(tf.float32, [batch_size,] + image_size)
+    input_x = tf.placeholder(tf.float32, [batch_size, ] + image_size)
     input_x_eval = tf.placeholder(tf.float32, [None] + image_size)
     sam_z = tf.placeholder(tf.float32, [args.batch_size, z_len])
 
@@ -55,8 +90,8 @@ def main(args, logging):
 
     # lr prior
     imgs_real_lr = tf.image.flip_left_right(imgs_real)
-    z_gen_lr = model.z_generator(imgs_real_lr, z_len, args.dim_encoder, is_training=True, image_size=image_size, reuse=True)
-
+    z_gen_lr = model.z_generator(imgs_real_lr, z_len, args.dim_encoder, is_training=True, image_size=image_size,
+                                 reuse=True)
 
     imgs_concat = tf.concat([imgs_real, x_gen], 0)
     z_concat = tf.concat([z_gen, sam_z], 0)
@@ -72,8 +107,8 @@ def main(args, logging):
 
     z1_loss = -1
     if args.aug > 0:
-        z1_loss = tf.reduce_mean(tf.reduce_sum((z_gen-z_gen_lr)**2,1))
-        gen_loss += args.aug*z1_loss
+        z1_loss = tf.reduce_mean(tf.reduce_sum((z_gen - z_gen_lr) ** 2, 1))
+        gen_loss += args.aug * z1_loss
 
     if args.alice:
         lamb = 1 / 1000
@@ -109,6 +144,16 @@ def main(args, logging):
     if tensorboard_log:
         summary1 = utils_summary.summary_collection('col1')
         summary2 = utils_summary.summary_collection('col2')
+        summary_cluster = utils_summary.summary_collection('col3')
+        if calc_cluster_flag:
+            ph_ACC = tf.placeholder(tf.float32)
+            ph_NMI = tf.placeholder(tf.float32)
+            ph_ARI = tf.placeholder(tf.float32)
+            clustering_algo = KMeans(n_clusters=dataset_eval.num_classes, precompute_distances=True, n_jobs=1)
+            with tf.name_scope('cluster'):
+                summary_cluster.add_summary_scalar(ph_ACC,'ACC')
+                summary_cluster.add_summary_scalar(ph_NMI,'NMI')
+                summary_cluster.add_summary_scalar(ph_ARI,'ARI')
         with tf.name_scope('losses'):
             summary1.add_summary_scalar(disc_loss, 'disc_loss')
             summary1.add_summary_scalar(gen_loss, 'gen_loss')
@@ -118,18 +163,27 @@ def main(args, logging):
         summary2.add_collection(summary1)
         summary_op_1 = tf.summary.merge(summary1.get_summary())
         summary_op_2 = tf.summary.merge(summary2.get_summary())
+        summary_op_cluster = tf.summary.merge(summary_cluster.get_summary())
+
 
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     init = tf.global_variables_initializer()
     config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False)
     with tf.Session(config=config) as sess:
         sess.run(init)
+        # -- create tensorboard summary writers -- #
         if tensorboard_log:
             summary_writer = tf.summary.FileWriter(os.path.join(args.log_dir, 'tb_summary'), graph=sess.graph)
-        os.makedirs(os.path.join(args.log_dir, 'latent'), exist_ok=True)
+            summary_writer_cluster = []
+            if calc_cluster_flag:
+                for Len in cluster_sz:
+                    summary_writer_cluster.append(tf.summary.FileWriter(os.path.join(args.log_dir,'tb_Cluster'+str(Len))))
+        save_latent_iter = latent_samples_iter[0]
+        latent_ind = 0
         it = -1
         ep = -1
         global_step = -1
+        cluster_thread = None
         while global_step <= max_iter:  # for epoch
             dataset_train.init_dataset(sess)
             ep += 1
@@ -137,6 +191,10 @@ def main(args, logging):
             it_in_epoch = 0
             while global_step <= max_iter:  # for iter in epoch
                 try:
+                    global_step += 1
+                    it += 1
+                    it_in_epoch += 1
+
                     # -- train network -- #
                     x = sess.run(next_element_train)
                     z = np.random.normal(size=(batch_size, z_len))
@@ -158,21 +216,37 @@ def main(args, logging):
                             summary_str = sess.run(summary_op_1, {input_x: x, sam_z: z})
                             summary_writer.add_summary(summary_str, global_step)
 
-                    # -- save latent space -- #
-                    if global_step % save_latent_iter == 0 and global_step > save_latent_start:
+                    # -- save latent space to queue-- #
+                    if global_step == save_latent_iter:
                         dataset_eval.init_dataset(sess)
                         info_str = 'saving latent iter: ' + str(global_step)
                         logging.info(info_str)
                         print('\r', info_str, end='', flush=True)
-                        t_eval_z = []
+                        latent_eval = []
+                        label_eval = []
                         while True:
                             try:
-                                t_x = sess.run(next_element_eval)
-                                t_eval_z.append(z_eval.eval({input_x_eval: t_x}))
+                                t_x, t_l = sess.run(next_element_eval)
+                                latent_eval.append(z_eval.eval({input_x_eval: t_x}))
+                                label_eval.append(t_l)
                             except tf.errors.OutOfRangeError:
                                 break
-                        np.savez(os.path.join(args.log_dir, 'latent', 'latent' + str(global_step) + '.npz'),
-                                 latent=np.concatenate(t_eval_z, 0))
+                        latent_eval = np.concatenate(latent_eval, 0)
+                        label_eval = np.concatenate(label_eval, 0)
+                        latent_queue.append(latent_eval)
+                        latent_ind += 1
+                        save_latent_iter = latent_samples_iter[latent_ind]
+
+                    # -- calc clustering -- #
+                    if global_step % cluster_sample == 0 and calc_cluster_flag:
+                        if cluster_thread is not None:
+                            cluster_thread.join()
+                        latent_list = list(latent_queue)
+                        cluster_args = (sess,latent_list,label_eval,clustering_algo,global_step,summary_writer_cluster,
+                                     summary_op_cluster,ph_ACC,ph_NMI,ph_ARI,logging)
+                        cluster_thread = threading.Thread(target=calc_cluster, args=cluster_args)
+                        cluster_thread.start()
+
 
                     # -- save images -- #
                     if tensorboard_log and global_step % save_image_iter == 0:
@@ -180,21 +254,24 @@ def main(args, logging):
                         summary_writer.add_summary(summary_str, global_step)
                         summary_writer.flush()
 
-                    global_step += 1
-                    it += 1
-                    it_in_epoch += 1
                 except tf.errors.OutOfRangeError:
                     break
-
+        # save last latent space to disk
+        for data in latent_queue:
+            step, latents, labels = data
+            np.savez(os.path.join(args.log_dir, 'latent', 'latent' + str(step) + '.npz'),
+                     latent=latents)
+        cluster_thread.join()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset', choices=['celeba', 'cifar10', 'cifar100', 'stl10'], type=str, help='choose dataset')
-    parser.add_argument('--train_on',default='all', choices=['train', 'test', 'all'], type=str,
+    parser.add_argument('--train_on', default='all', choices=['train', 'test', 'all'], type=str,
                         help='on which images to train')
     parser.add_argument('--img_size', default=None, type=int, help='the seed of the network initial')
     parser.add_argument('log_dir', type=str, help='where to save all logs')
-    parser.add_argument('--architecture', default='model2', choices=['model1', 'model2', 'ALI_orig_celeba', 'ALI_orig_cifar10'],
+    parser.add_argument('--architecture', default='model2',
+                        choices=['model1', 'model2', 'ALI_orig_celeba', 'ALI_orig_cifar10'],
                         type=str, help='maximum iteration until stop')
     parser.add_argument('--max_iter', default=500000, type=int, help='maximum iteration until stop')
     parser.add_argument('--seed', default=-1, type=int, help='the seed of the network initial')
@@ -204,16 +281,17 @@ if __name__ == "__main__":
     parser.add_argument('--dim_encoder', default=128, type=int, help='encoder dimension')
     parser.add_argument('--dim_discriminator', default=128, type=int, help='discriminator dimension')
     parser.add_argument('--z_len', default=64, type=int, help='length of the encoder latent space')
-    parser.add_argument('--save_latent_start', default=0, type=int, help='number of iteration to save latent space')
-    parser.add_argument('--save_latent_iter', default=5000, type=int, help='number of iteration to save latent space')
     parser.add_argument('--save_image_iter', default=5000, type=int, help='number of iteration to save images')
     parser.add_argument('--save_images', default=True, type=bool, help='save images')
-    parser.add_argument('--log_iter', default=20, type=int, help='number of iteration to save log')
+    parser.add_argument('--log_iter', default=100, type=int, help='number of iteration to save log')
     parser.add_argument('--alice', default=False, type=bool, help='use ALI conditional entropy')
-    parser.add_argument('--aug', default=0, type=float, help='weight on the constrain of latent space augmentation')#0.001
+    parser.add_argument('--aug', default=0, type=float,
+                        help='weight on the constrain of latent space augmentation')  # 0.001
     parser.add_argument('--tensorboard_log', default=True, type=bool, help='create tensorboard logs')
     parser.add_argument('--gpu', default=0, type=int, help='use gpu number')
-    parser.add_argument('--calc_cluster', default=False, action='store_true', help='calculate clustering curves')
+    parser.add_argument('--calc_cluster', default=True, action='store_true', help='calculate clustering curves')
+    parser.add_argument('--cluster_gap', default=5000, type=int, help='number of iteration to save latent space')
+    parser.add_argument('--cluster_sample', default=5000, type=int, help='number of iteration to save latent space')
 
     args = parser.parse_args()
     os.makedirs(args.log_dir)
@@ -235,13 +313,4 @@ if __name__ == "__main__":
         logging.info(log_str)
         print(log_str)
 
-    if args.calc_cluster:
-        p = subprocess.Popen("python cluster_analysis.py " + args.log_dir + " full",cwd=os.getcwd(),
-                             shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     main(args, logging)
-
-    if args.calc_cluster:
-        (stdoutput, erroutput) = p.communicate()
-        print(stdoutput)
-        # time.sleep(600)
-        # p.kill()
