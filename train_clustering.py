@@ -59,6 +59,7 @@ def main(args, logging):
     latent_samples_iter = np.unique(latent_samples_iter)
     latent_samples_iter = latent_samples_iter[latent_samples_iter >= 0]
     latent_samples_iter = list(latent_samples_iter)
+    latent_samples_iter.append(-1) # add dummy iteration
     latent_queue = collections.deque(maxlen=max_hist)
 
     # choose model
@@ -257,8 +258,7 @@ def main(args, logging):
                 except tf.errors.OutOfRangeError:
                     break
         # save last latent space to disk
-        for data in latent_queue:
-            step, latents, labels = data
+        for latents,step in zip(latent_queue, latent_samples_iter[-max_hist-1:-1]):
             np.savez(os.path.join(args.log_dir, 'latent', 'latent' + str(step) + '.npz'),
                      latent=latents)
         cluster_thread.join()
