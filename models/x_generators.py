@@ -2,22 +2,13 @@ import tensorflow as tf
 from models.ResidualBlocks import *
 
 
-def z_trans(z,is_training):
-    with tf.variable_scope("z_trans", reuse=tf.AUTO_REUSE) as scope:
-        output = tf.layers.dense(z, 256, tf.nn.relu)
-        output = tf.layers.batch_normalization(output, -1, 0.9, training=is_training)
-        output = tf.layers.dense(output, 256, tf.nn.relu)
-        output = tf.layers.batch_normalization(output, -1, 0.9, training=is_training)
-        output = tf.layers.dense(output, 64)
-    return output
-
-
 def x_generator1(in_,labels,DIM,is_training,image_size, reuse):
     cur_size = image_size[0]
     while cur_size >= 8 and cur_size % 2 == 0:
         cur_size = int(cur_size/2)
     with tf.variable_scope("x_generator", reuse=reuse) as scope:
-        output = tf.layers.dense(in_, cur_size*cur_size*DIM, name='Input')
+        output = in_
+        output = tf.layers.dense(output, cur_size*cur_size*DIM, name='Input')
         output = tf.reshape(output, [-1, cur_size, cur_size, DIM])
         i=1
         while cur_size != image_size[0]:
