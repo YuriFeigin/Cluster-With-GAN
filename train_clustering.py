@@ -28,8 +28,7 @@ def calc_cluster(sess,all_latent,labels,clustering_algo,global_step,summary_writ
     info_str = 'Calculate Clustering'
     for i, hist_len in enumerate(cluster_sz):
         if len(all_latent) >= hist_len:
-            clustering_algo.fit(np.concatenate(all_latent[-hist_len:], 1))
-            y_pred = clustering_algo.labels_[ind_labeld_imgs]
+            y_pred = clustering_algo.fit_predict(np.concatenate(all_latent[-hist_len:], 1))[ind_labeld_imgs]
             acc = utils.ACC(labels, y_pred)[0]
             nmi = metrics.normalized_mutual_info_score(labels, y_pred, 'geometric')
             ari = metrics.adjusted_rand_score(labels, y_pred)
