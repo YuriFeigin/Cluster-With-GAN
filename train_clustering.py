@@ -100,15 +100,17 @@ def main(args, logging):
     p, q = tf.split(t_d, 2)
 
     # cost function
-    disc_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=p, labels=tf.ones_like(
-        p)) + tf.nn.sigmoid_cross_entropy_with_logits(logits=q, labels=tf.zeros_like(q)))
-    gen_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=p, labels=tf.zeros_like(
-        p)) + tf.nn.sigmoid_cross_entropy_with_logits(logits=q, labels=tf.ones_like(q)))
+    disc_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=p, labels=tf.ones_like(p)))
+    disc_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=q, labels=tf.zeros_like(q)))
+    disc_loss = (disc_real + disc_fake) / 2
+    gen_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=q, labels=tf.ones_like(q)))
+    enc_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=p, labels=tf.zeros_like(p)))
+    enc_gen_loss = (gen_loss + enc_loss) / 2
 
     z1_loss = -1
     if args.aug > 0:
         z1_loss = tf.reduce_mean(tf.reduce_sum((z_gen - z_gen_lr) ** 2, 1))
-        gen_loss += args.aug * z1_loss
+        enc_gen_loss += args.aug * z1_loss
 
     if args.alice:
         lamb = 1 / 1000
@@ -116,7 +118,7 @@ def main(args, logging):
         z_rec = model.z_generator(x_gen, z_len, args.dim_encoder, is_training=True, image_size=image_size, reuse=True)
         x_rec_loss = tf.reduce_mean(tf.abs(imgs_real - x_rec))
         z_rec_loss = tf.reduce_mean(tf.abs(sam_z - z_rec))
-        gen_loss += lamb * x_rec_loss + lamb * z_rec_loss
+        enc_gen_loss += lamb * x_rec_loss + lamb * z_rec_loss
 
     # optimizer
     var = tf.trainable_variables()
@@ -125,7 +127,7 @@ def main(args, logging):
     disc_var = [v for v in var if 'Discriminator' in v.name]
     gen_opt = tf.train.AdamOptimizer(learning_rate=args.lr * 5, beta1=0.5, beta2=0.999)
     disc_opt = tf.train.AdamOptimizer(learning_rate=args.lr, beta1=0.5, beta2=0.999)
-    gen_gv = gen_opt.compute_gradients(gen_loss, var_list=x_gen_var + z_gen_var)
+    gen_gv = gen_opt.compute_gradients(enc_gen_loss, var_list=x_gen_var + z_gen_var)
     disc_gv = disc_opt.compute_gradients(disc_loss, var_list=disc_var)
     gen_train_op = gen_opt.apply_gradients(gen_gv)
     disc_train_op = disc_opt.apply_gradients(disc_gv)
@@ -155,9 +157,16 @@ def main(args, logging):
                 summary_cluster.add_summary_scalar(ph_NMI,'NMI')
                 summary_cluster.add_summary_scalar(ph_ARI,'ARI')
         with tf.name_scope('losses'):
+            summary1.add_summary_scalar(disc_real, 'disc_real')
+            summary1.add_summary_scalar(disc_fake, 'disc_fake')
             summary1.add_summary_scalar(disc_loss, 'disc_loss')
+            summary1.add_summary_scalar(enc_gen_loss, 'enc_gen_loss')
             summary1.add_summary_scalar(gen_loss, 'gen_loss')
+            summary1.add_summary_scalar(enc_loss, 'enc_loss')
             summary1.add_summary_scalar(z1_loss, 'z1_loss')
+            summary1.add_summary_scalar(tf.math.sqrt(tf.reduce_mean(gen_gv[len(x_gen_var)-2][0]**2)), 'gen_grad')
+            summary1.add_summary_scalar(tf.math.sqrt(tf.reduce_mean(gen_gv[len(gen_gv)-2][0]**2)), 'enc_grad')
+            summary1.add_summary_scalar(tf.math.sqrt(tf.reduce_mean(disc_gv[0][0]**2)), 'disc_grad')
         summary2.add_summary_image2(imgs_real, x_rec, 12 ** 2, 'Input')
         summary2.add_summary_image1(x_gen_fix, args.batch_size, 'Sam')
         summary2.add_collection(summary1)
@@ -201,7 +210,7 @@ def main(args, logging):
                     start_time = time.time()
                     d_loss, _ = sess.run([disc_loss, disc_train_op], {input_x: x, sam_z: z})
                     for i in range(1):
-                        g_loss, _, _ = sess.run([gen_loss, gen_train_op, update_ops], {input_x: x, sam_z: z})
+                        g_loss, _, _ = sess.run([enc_gen_loss, gen_train_op, update_ops], {input_x: x, sam_z: z})
                     duration = time.time() - start_time
 
                     # -- save log -- #
