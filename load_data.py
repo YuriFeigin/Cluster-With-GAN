@@ -159,7 +159,9 @@ class cifar10(DataSet):
             self.resize = True
         self.is_imgs = True
         self.num_classes = 10
-        (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
+        (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data() 
+        x_train = ((x_train - np.mean(x_train, (1, 2), keepdims=True)) / 2 + 128)
+        x_test = ((x_test - np.mean(x_test, (1, 2), keepdims=True)) / 2 + 128)
         y_train = np.squeeze(y_train)
         y_test = np.squeeze(y_test)
         self.imgs = np.concatenate([x_train, x_test], 0)
