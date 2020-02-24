@@ -97,15 +97,19 @@ def main(args, logging):
     z_concat = tf.concat([z_gen, sam_z], 0)
     t_d = model.discriminator(imgs_concat, z_concat, args.dim_discriminator, is_training=True, image_size=image_size,
                               reuse=False)
-    p, q = tf.split(t_d, 2)
+    p1, q1 = tf.split(t_d, 2)
+
+    t_d = model.discriminator(imgs_concat, z_concat, args.dim_discriminator, is_training=False, image_size=image_size,
+                              reuse=True)
+    p2, q2 = tf.split(t_d, 2)
 
     # cost function
-    disc_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=p, labels=tf.ones_like(p)))
-    disc_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=q, labels=tf.zeros_like(q)))
+    disc_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=p1, labels=tf.ones_like(p1)))
+    disc_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=q1, labels=tf.zeros_like(q1)))
     disc_loss = (disc_real + disc_fake) / 2
-    gen_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=q, labels=tf.ones_like(q)))
-    enc_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=p, labels=tf.zeros_like(p)))
-    enc_gen_loss = (gen_loss + enc_loss) / 2
+    gen_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=q2, labels=tf.ones_like(q2)))
+    enc_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=p2, labels=tf.zeros_like(p2)))
+    enc_gen_loss = (enc_loss + gen_loss) / 2
 
     z1_loss = -1
     if args.aug > 0:
@@ -125,6 +129,7 @@ def main(args, logging):
     x_gen_var = [v for v in var if 'Decoder' in v.name]
     z_gen_var = [v for v in var if 'Encoder' in v.name]
     disc_var = [v for v in var if 'Discriminator' in v.name]
+    gen_save = tf.train.Saver(x_gen_var)
     gen_opt = tf.train.AdamOptimizer(learning_rate=args.lr * 5, beta1=0.5, beta2=0.999)
     disc_opt = tf.train.AdamOptimizer(learning_rate=args.lr, beta1=0.5, beta2=0.999)
     gen_gv = gen_opt.compute_gradients(enc_gen_loss, var_list=x_gen_var + z_gen_var)
@@ -153,9 +158,9 @@ def main(args, logging):
             ph_ARI = tf.placeholder(tf.float32)
             clustering_algo = KMeans(n_clusters=dataset_eval.num_classes, precompute_distances=True, n_jobs=1)
             with tf.name_scope('cluster'):
-                summary_cluster.add_summary_scalar(ph_ACC,'ACC')
-                summary_cluster.add_summary_scalar(ph_NMI,'NMI')
-                summary_cluster.add_summary_scalar(ph_ARI,'ARI')
+                summary_cluster.add_summary_scalar(ph_ACC, 'ACC')
+                summary_cluster.add_summary_scalar(ph_NMI, 'NMI')
+                summary_cluster.add_summary_scalar(ph_ARI, 'ARI')
         with tf.name_scope('losses'):
             summary1.add_summary_scalar(disc_real, 'disc_real')
             summary1.add_summary_scalar(disc_fake, 'disc_fake')
@@ -180,6 +185,7 @@ def main(args, logging):
     config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False)
     with tf.Session(config=config) as sess:
         sess.run(init)
+        # gen_save.restore(sess, tf.train.latest_checkpoint('/root/Documents/Cluster-With-GAN/results/clustering2/cifar10'))
         # -- create tensorboard summary writers -- #
         if tensorboard_log:
             summary_writer = tf.summary.FileWriter(os.path.join(args.log_dir, 'tb_summary'), graph=sess.graph)
@@ -262,6 +268,9 @@ def main(args, logging):
                         summary_str = sess.run(summary_op_2, {input_x: x, sam_z: z})
                         summary_writer.add_summary(summary_str, global_step)
                         summary_writer.flush()
+
+                    if global_step % 100000 == 0:
+                        gen_save.save(sess, os.path.join(args.log_dir, 'gen-model'), global_step=global_step)
 
                 except tf.errors.OutOfRangeError:
                     break
