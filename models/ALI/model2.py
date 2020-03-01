@@ -16,7 +16,7 @@ def x_generator(in_,DIM,is_training,image_size, reuse):
 def discriminator(in_x, in_z,DIM, is_training,image_size, reuse):
     labels = [None, None]
     with tf.variable_scope("Discriminator", reuse=reuse) as scope:
-        out_x = z_generators.z_generator12(in_x,labels,DIM,None, is_training,image_size, reuse)
+        out_x = z_generators.z_generator12(in_x, labels, DIM, None, is_training,image_size, reuse)
         out_x = tf.layers.dense(out_x, 512)
 
         out_z = in_z

@@ -129,7 +129,8 @@ def main(args, logging):
     x_gen_var = [v for v in var if 'Decoder' in v.name]
     z_gen_var = [v for v in var if 'Encoder' in v.name]
     disc_var = [v for v in var if 'Discriminator' in v.name]
-    gen_save = tf.train.Saver(x_gen_var)
+    gen_save = tf.train.Saver([v for v in tf.global_variables() if 'Decoder' in v.name])
+    enc_save = tf.train.Saver([v for v in tf.global_variables() if 'Encoder' in v.name])
     gen_opt = tf.train.AdamOptimizer(learning_rate=args.lr * 5, beta1=0.5, beta2=0.999)
     disc_opt = tf.train.AdamOptimizer(learning_rate=args.lr, beta1=0.5, beta2=0.999)
     gen_gv = gen_opt.compute_gradients(enc_gen_loss, var_list=x_gen_var + z_gen_var)
@@ -185,7 +186,8 @@ def main(args, logging):
     config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False)
     with tf.Session(config=config) as sess:
         sess.run(init)
-        # gen_save.restore(sess, tf.train.latest_checkpoint('/root/Documents/Cluster-With-GAN/results/clustering2/cifar10'))
+        # enc_save.restore(sess, tf.train.latest_checkpoint('/root/Documents/Cluster-With-GAN/results/clustering30/cifar10'))
+        # gen_save.restore(sess, tf.train.latest_checkpoint('/root/Documents/Cluster-With-GAN/results/clustering30/cifar10'))
         # -- create tensorboard summary writers -- #
         if tensorboard_log:
             summary_writer = tf.summary.FileWriter(os.path.join(args.log_dir, 'tb_summary'), graph=sess.graph)
@@ -269,13 +271,14 @@ def main(args, logging):
                         summary_writer.add_summary(summary_str, global_step)
                         summary_writer.flush()
 
-                    if global_step % 100000 == 0:
+                    if global_step % 100000 == 0 or global_step >= 450000:
                         gen_save.save(sess, os.path.join(args.log_dir, 'gen-model'), global_step=global_step)
+                        enc_save.save(sess, os.path.join(args.log_dir, 'enc-model'), global_step=global_step)
 
                 except tf.errors.OutOfRangeError:
                     break
         # save last latent space to disk
-        for latents,step in zip(latent_queue, latent_samples_iter[-max_hist-1:-1]):
+        for latents, step in zip(latent_queue, latent_samples_iter[-max_hist-1:-1]):
             np.savez(os.path.join(args.log_dir, 'latent', 'latent' + str(step) + '.npz'),
                      latent=latents)
         cluster_thread.join()
