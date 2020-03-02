@@ -271,7 +271,7 @@ def main(args, logging):
                         summary_writer.add_summary(summary_str, global_step)
                         summary_writer.flush()
 
-                    if global_step % 100000 == 0 or global_step >= 450000:
+                    if global_step % 100000 == 0 or (global_step >= 450000 and global_step % 5000 == 0):
                         gen_save.save(sess, os.path.join(args.log_dir, 'gen-model'), global_step=global_step)
                         enc_save.save(sess, os.path.join(args.log_dir, 'enc-model'), global_step=global_step)
 
