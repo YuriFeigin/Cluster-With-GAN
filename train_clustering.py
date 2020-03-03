@@ -42,6 +42,7 @@ def calc_cluster(sess,all_latent,labels,clustering_algo,global_step,summary_writ
 def main(args, logging):
     # get frequently argument
     batch_size = args.batch_size
+    pad_size = args.pad_size
     z_len = args.z_len
     log_iter = args.log_iter
     max_iter = args.max_iter
@@ -67,10 +68,11 @@ def main(args, logging):
     model = all_models.get(args.architecture)
 
     # prepare data
-    dataset_train = load_data.Load(args.dataset, args.train_on, shuffle=True, batch_size=batch_size,
+    dataset_train = load_data.Load(args.dataset, args.train_on, shuffle=True, batch_size=batch_size, pad_size=pad_size,
                                    img_size=args.img_size)
     next_element_train = dataset_train.get_imgs_next()
-    dataset_eval = load_data.Load(args.dataset, 'all', shuffle=False, batch_size=500, img_size=args.img_size)
+    dataset_eval = load_data.Load(args.dataset, 'all', shuffle=False, batch_size=500, pad_size=0,
+                                  img_size=args.img_size)
     next_element_eval = dataset_eval.get_full_next()
     image_size = [dataset_train.img_size, dataset_train.img_size, next_element_train.shape.as_list()[-1]]
 
@@ -297,6 +299,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', default=-1, type=int, help='the seed of the network initial')
     parser.add_argument('--lr', default=1e-4, type=float, help='learning rate')
     parser.add_argument('--batch_size', default=100, type=int, help='')
+    parser.add_argument('--pad_size', default=4, type=int, help='train padding size')
     parser.add_argument('--dim_decoder', default=128, type=int, help='decoder dimension')
     parser.add_argument('--dim_encoder', default=128, type=int, help='encoder dimension')
     parser.add_argument('--dim_discriminator', default=128, type=int, help='discriminator dimension')

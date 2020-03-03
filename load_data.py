@@ -5,27 +5,28 @@ from skimage import io
 from skimage.transform import resize
 from sklearn.cluster import KMeans
 
-STL_DATA_PATH_TRAIN = '/dl_data/datasets/STL10/train_X.bin'
-STL_LABEL_PATH_TRAIN = '/dl_data/datasets/STL10/train_y.bin'
-STL_DATA_PATH_TEST = '/dl_data/datasets/STL10/test_X.bin'
-STL_LABEL_PATH_TEST = '/dl_data/datasets/STL10/test_y.bin'
-STL_DATA_PATH_UNLABELD = '/dl_data/datasets/STL10/unlabeled_X.bin'
+STL_PATH = '/root/Documents/Cluster-With-GAN/datasets/stl10_binary'
+STL_DATA_PATH_TRAIN = os.path.join(STL_PATH, 'train_X.bin')
+STL_LABEL_PATH_TRAIN = os.path.join(STL_PATH, 'train_y.bin')
+STL_DATA_PATH_TEST = os.path.join(STL_PATH, 'test_X.bin')
+STL_LABEL_PATH_TEST = os.path.join(STL_PATH, 'test_y.bin')
+STL_DATA_PATH_UNLABELD = os.path.join(STL_PATH, 'unlabeled_X.bin')
 
 CELEBA_PATH = '/dl_data/datasets/CelebA/'
 
 
-def Load(name, data, shuffle, batch_size, img_size):
+def Load(name, data, shuffle, batch_size, pad_size, img_size):
     with tf.device("/cpu:0"):
         if name == "GMM":
             dataset = GMM.DataSet(data, shuffle, batch_size)
         elif name == "mnist":
             dataset = mnist.DataSet(data, shuffle, batch_size)
         elif name == "cifar10":
-            dataset = cifar10(data, shuffle, batch_size, img_size)
+            dataset = cifar10(data, shuffle, batch_size, pad_size, img_size)
         elif name == "cifar100":
-            dataset = cifar100(data, shuffle, batch_size, img_size)
+            dataset = cifar100(data, shuffle, batch_size, pad_size, img_size)
         elif name == "stl10":
-            dataset = stl10(data, shuffle, batch_size, img_size)
+            dataset = stl10(data, shuffle, batch_size, pad_size, img_size)
         elif name == "imnet32":
             if data == 'train':
                 data_path = '/dl_data/users/Yuri/Small_ImageNet/train_32x32/*.tfrecords'
@@ -51,8 +52,15 @@ class DataSet:
             img = tf.image.resize_images(img, [img_size, img_size], method=tf.image.ResizeMethod.BILINEAR)
             # img = tf.clip_by_value(img, 0, 255)
             return img, labels
+
+        def random_crop(img, labels):
+            # shape = tf.shape(img)
+            # img = tf.pad(img, [[4] * 2, [4] * 2, [0] * 2], mode='REFLECT')
+            img = tf.random_crop(img, [img_size, img_size, self.imgs.shape[-1]])
+            return img, labels
+
         if self.is_imgs:
-            self.imgs_placeholder = tf.placeholder(self.imgs.dtype, [None, img_size, img_size, self.imgs.shape[-1]])
+            self.imgs_placeholder = tf.placeholder(self.imgs.dtype, [None, img_size + 2 * self.pad_size, img_size + 2 * self.pad_size, self.imgs.shape[-1]])
         else:
             self.imgs_placeholder = tf.placeholder(self.imgs.dtype, [None, ])
         self.labels_placeholder = tf.placeholder(self.labels.dtype, [None] + list(self.labels.shape[1:]))
@@ -61,11 +69,12 @@ class DataSet:
             dataset = dataset.map(map_func, num_parallel_calls=16)
         if self.resize and img_size > 100 and not self.is_imgs:
             dataset = dataset.map(dataset_map_resize, num_parallel_calls=16)
+        dataset = dataset.map(random_crop, num_parallel_calls=4)
         if shuffle:
             dataset = dataset.shuffle(4096)
-            dataset = dataset.batch(batch_size,drop_remainder=True)
+            dataset = dataset.batch(batch_size, drop_remainder=True)
         else:
-            dataset = dataset.batch(batch_size,drop_remainder=False)
+            dataset = dataset.batch(batch_size, drop_remainder=False)
         dataset = dataset.repeat(1).prefetch(8)
         self.iterator = dataset.make_initializable_iterator()
         self.next_element = self.iterator.get_next()
@@ -129,10 +138,10 @@ class DataSet:
         ind = self.ind.get(self.data)
         self.imgs = self.imgs[ind]
         self.labels = self.labels[ind]
-        if self.resize and self.img_size <= 100 and self.is_imgs:
-            print('start resize',flush=True)
-            self.imgs = np.stack([resize(img, (self.img_size, self.img_size), anti_aliasing=True) * 255 for img in self.imgs], 0)
-            print('finish resize',flush=True)
+        if (self.resize and self.img_size <= 100 and self.is_imgs) or self.pad_size:
+            print('start resize', flush=True)
+            self.imgs = np.stack([resize(img, (self.img_size+2*self.pad_size, self.img_size + 2*self.pad_size), anti_aliasing=True) * 255 for img in self.imgs], 0)
+            print('finish resize', flush=True)
         self.is_init = True
         
     def init_dataset(self, sess):
@@ -146,11 +155,12 @@ class DataSet:
                                                        self.labels_placeholder: self.labels[ind]})
 
 class cifar10(DataSet):
-    def __init__(self, data, shuffle, batch_size, img_size):
+    def __init__(self, data, shuffle, batch_size, pad_size, img_size):
         super().__init__()
         self.data = data
         self.shuffle = shuffle
         self.batch_size = batch_size
+        self.pad_size = pad_size
         if img_size is None or img_size == 32:
             self.img_size = 32
             self.resize = False
@@ -176,11 +186,12 @@ class cifar10(DataSet):
         self.build_dataset(shuffle, batch_size, self.img_size)
 
 class cifar100(DataSet):
-    def __init__(self, data, shuffle, batch_size, img_size):
+    def __init__(self, data, shuffle, batch_size, pad_size, img_size):
         super().__init__()
         self.data = data
         self.shuffle = shuffle
         self.batch_size = batch_size
+        self.pad_size = pad_size
         if img_size is None or img_size == 32:
             self.img_size = 32
             self.resize = False
@@ -206,11 +217,12 @@ class cifar100(DataSet):
         self.build_dataset(shuffle, batch_size, self.img_size)
         
 class stl10(DataSet):
-    def __init__(self, data, shuffle, batch_size, img_size):
+    def __init__(self, data, shuffle, batch_size, pad_size, img_size):
         super().__init__()
         self.data = data
         self.shuffle = shuffle
         self.batch_size = batch_size
+        self.pad_size = pad_size
         if img_size is None or img_size == 96:
             self.img_size = 96
             self.resize = False
@@ -238,10 +250,10 @@ class stl10(DataSet):
                                     np.ones_like(y_unlabeled, np.bool)], 0)
 
         self.ind = {}
-        self.ind['train'] = np.logical_or(train_ind,unlabeled_ind)
+        self.ind['train'] = np.logical_or(train_ind, unlabeled_ind)
         self.ind['train_label'] = train_ind
         self.ind['test'] = test_ind
-        self.ind['all'] = np.logical_or(self.ind['train'],test_ind)
+        self.ind['all'] = np.logical_or(self.ind['train'], test_ind)
 
         self.build_dataset(shuffle, batch_size, self.img_size)
         
