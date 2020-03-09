@@ -124,8 +124,8 @@ def calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
     sigma1 = np.atleast_2d(sigma1)
     sigma2 = np.atleast_2d(sigma2)
 
-    assert mu1.shape == mu2.shape, "Training and test mean vectors have different lengths"
-    assert sigma1.shape == sigma2.shape, "Training and test covariances have different dimensions"
+    assert mu1.shape == mu2.shape, "Training and gael mean vectors have different lengths"
+    assert sigma1.shape == sigma2.shape, "Training and gael covariances have different dimensions"
 
     diff = mu1 - mu2
 
@@ -210,7 +210,7 @@ def _handle_path(path, sess):
         f.close()
         if path == 'train':
             m, s = calculate_activation_statistics(x_train, sess)
-        elif path == 'test':
+        elif path == 'gael':
             m, s = calculate_activation_statistics(x_test, sess)
     else:
         path = pathlib.Path(path)

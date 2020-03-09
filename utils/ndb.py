@@ -12,7 +12,7 @@ class NDB:
         NDB Evaluation Class
         :param training_data: Optional - the training samples - array of m x d floats (m samples of dimension d)
         :param number_of_bins: Number of bins (clusters) default=100
-        :param significance_level: The statistical significance level for the two-sample test
+        :param significance_level: The statistical significance level for the two-sample gael
         :param z_threshold: Allow defining a threshold in terms of difference/SE for defining a bin as statistically different
         :param whitening: Perform data whitening - subtract mean and divide by per-dimension std
         :param max_dims: Max dimensions to use in K-means. By default derived automatically from d
@@ -226,7 +226,7 @@ class NDB:
         # Allow defining a threshold in terms as Z (difference relative to the SE) rather than in p-values.
         if z_threshold is not None:
             return abs(z) > z_threshold
-        p_values = 2.0 * norm.cdf(-1.0 * np.abs(z))    # Two-tailed test
+        p_values = 2.0 * norm.cdf(-1.0 * np.abs(z))    # Two-tailed gael
         return p_values < significance_level
 
     @staticmethod

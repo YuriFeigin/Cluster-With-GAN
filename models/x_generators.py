@@ -29,7 +29,7 @@ def x_generator2(in_,labels,DIM,is_training,image_size, reuse):
         cur_size = int(cur_size/2)
         n_layer += 1
     with tf.variable_scope("x_generator", reuse=reuse) as scope:
-        factor = min(2**n_layer,8)
+        factor = min(2**n_layer, 8)
         output = in_
         output = tf.layers.dense(output, cur_size*cur_size*DIM*factor, name='Input')
         output = tf.reshape(output, [-1, cur_size, cur_size, DIM*factor])

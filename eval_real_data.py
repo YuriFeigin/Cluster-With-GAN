@@ -1,8 +1,8 @@
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 import argparse
 import numpy as np
 import tensorflow as tf
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 import load_data
 import utils.inception_score as inception_score
 import utils.ndb as ndb
@@ -28,10 +28,10 @@ def main(args):
             except tf.errors.OutOfRangeError:
                 break
         train_imgs = np.concatenate(train_imgs, 0)
-        if args.eval == 'ndb':
-            ndb_model = ndb.NDB(np.random.permutation(train_imgs)[:80000],max_dims=2000, semi_whitening=True)
-        else:
-            inception_score.update_fid_mean(train_imgs)
+        # if args.eval == 'ndb':
+        #     ndb_model = ndb.NDB(np.random.permutation(train_imgs)[:80000],max_dims=2000, semi_whitening=True)
+        # else:
+            # inception_score.update_fid_mean(train_imgs)
 
         # get images to eval inception scores and fid
         dataset_test.init_dataset(sess)
@@ -59,9 +59,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset', choices=['celeba', 'cifar10', 'cifar100', 'stl10'], type=str, help='choose dataset')
     parser.add_argument('eval', choices=['is', 'fid', 'ndb'], type=str, help='choose dataset')
-    parser.add_argument('--train_on',default='train', choices=['train', 'test', 'labeled', 'all'], type=str,
+    parser.add_argument('--train_on',default='train', choices=['train', 'gael', 'labeled', 'all'], type=str,
                         help='on which images to train')
-    parser.add_argument('--test_on',default='test', choices=['train', 'test', 'labeled', 'all'], type=str,
+    parser.add_argument('--test_on',default='gael', choices=['train', 'gael', 'labeled', 'all'], type=str,
                         help='on which images to train')
     parser.add_argument('--img_size', default=32, type=int, help='the seed of the network initial')
 

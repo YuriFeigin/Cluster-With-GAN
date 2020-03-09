@@ -29,11 +29,13 @@ def UpsampleConv(inputs,output_dim, filter_size,name):
         output = tf.layers.conv2d(output,output_dim,filter_size,padding='same',name='conv')
     return output
 
+
 def ConvMeanPool(inputs,output_dim, filter_size,name):
     with tf.variable_scope(name) as scope:
         output = tf.layers.conv2d(inputs, output_dim, filter_size, padding='same', name='Conv')
         output = tf.layers.average_pooling2d(output,2,2)
     return output
+
 
 def MeanPoolConv(inputs,output_dim, filter_size,name):
     with tf.variable_scope(name) as scope:

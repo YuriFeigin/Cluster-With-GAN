@@ -181,7 +181,7 @@ class cifar10(DataSet):
 
         self.ind = {}
         self.ind['train'] = train_ind
-        self.ind['gael'] = test_ind
+        self.ind['test'] = test_ind
         self.ind['all'] = np.logical_or(train_ind, test_ind)
         self.build_dataset(shuffle, batch_size, self.img_size)
 
@@ -212,7 +212,7 @@ class cifar100(DataSet):
 
         self.ind = {}
         self.ind['train'] = train_ind
-        self.ind['gael'] = test_ind
+        self.ind['test'] = test_ind
         self.ind['all'] = np.logical_or(train_ind,test_ind)
         self.build_dataset(shuffle, batch_size, self.img_size)
         
@@ -252,7 +252,7 @@ class stl10(DataSet):
         self.ind = {}
         self.ind['train'] = np.logical_or(train_ind, unlabeled_ind)
         self.ind['train_label'] = train_ind
-        self.ind['gael'] = test_ind
+        self.ind['test'] = test_ind
         self.ind['all'] = np.logical_or(self.ind['train'], test_ind)
 
         self.build_dataset(shuffle, batch_size, self.img_size)
@@ -305,7 +305,7 @@ class celeba(DataSet):
         self.ind = {}
         self.ind['train'] = imgs_datasets == 0
         self.ind['valid'] = imgs_datasets == 1
-        self.ind['gael'] = imgs_datasets == 2
+        self.ind['test'] = imgs_datasets == 2
         self.ind['all'] = np.ones(self.imgs.shape[0], np.bool)
         def map_func_1(path):
             img = tf.read_file(path)

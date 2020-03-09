@@ -47,22 +47,3 @@ def z_generator12(in_x,labels,DIM,Normalization, is_training,image_size, reuse):
         output = nonlinearity(output)
         output = tf.layers.flatten(output)
         return output
-
-def z_generator13(in_x,labels,DIM,Normalization, is_training,image_size, reuse):
-    with tf.variable_scope("z_generator12", reuse=reuse) as scope:
-        output = OptimizedResBlockDisc1(in_x,DIM)
-        cur_size = output.get_shape().as_list()[1]
-        i = 1
-        while cur_size > 8 and cur_size % 2 == 0:
-            output = ResidualBlock_Down('ResidualBlock_Down.'+str(i), DIM, 3,is_training,Normalization, output, labels=labels)
-            output = tf.nn.dropout(output, keep_prob=0.8)  # dropout after activator
-            cur_size = output.get_shape().as_list()[1]
-            i += 1
-        output = ResidualBlock('ResidualBlock.1', DIM, 3, output, labels=labels)
-        output = tf.nn.dropout(output, keep_prob=0.5)     #dropout after activator
-        output = ResidualBlock('ResidualBlock.2', DIM, 3, output, labels=labels)
-        output = tf.nn.dropout(output, keep_prob=0.5)     #dropout after activator
-        output = nonlinearity(output)
-        output = tf.reduce_mean(output, axis=[1, 2])
-        output = tf.layers.flatten(output)
-        return output

@@ -350,7 +350,7 @@ if __name__ == "__main__":
     parser.add_argument('--clustering_path', type=str, help='clustering path')
     parser.add_argument('--n_clusters',default=40, type=int, help='number of clusters')
     parser.add_argument('--n_cluster_hist',default=10, type=int, help='number of latent space to be used from history')
-    parser.add_argument('--train_on', default='train', choices=['train', 'test', 'all'], type=str,
+    parser.add_argument('--train_on', default='train', choices=['train', 'gael', 'all'], type=str,
                         help='on which images to train')
     parser.add_argument('--img_size', default=None, type=int, help='the seed of the network initial')
     parser.add_argument('--architecture', default='model2', choices=['model1', 'model2', 'model2'],

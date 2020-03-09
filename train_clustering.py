@@ -10,14 +10,17 @@ import numpy as np
 from sklearn import metrics
 from sklearn.cluster import KMeans
 import tensorflow as tf
+from sklearn.mixture import GaussianMixture
 
 import load_data
-import models.ALI.model1 as model1
+# import models.ALI.model1 as model1
 import models.ALI.model2 as model2
 import models.ALI.ALI_orig_celeba as ALI_orig_celeba
 import models.ALI.ALI_orig_cifar10 as ALI_orig_cifar10
 import utils.utils_summary as utils_summary
 import utils.utils as utils
+import layers
+import gael.models.gael as gael
 
 cluster_sz = [1, 5, 10]
 
@@ -63,7 +66,7 @@ def main(args, logging):
     latent_queue = collections.deque(maxlen=max_hist)
 
     # choose model
-    all_models = {'model1': model1, 'model2': model2, 'ALI_orig_celeba': ALI_orig_celeba,
+    all_models = { 'model2': model2, 'ALI_orig_celeba': ALI_orig_celeba,
                   'ALI_orig_cifar10': ALI_orig_cifar10}
     model = all_models.get(args.architecture)
 
@@ -86,53 +89,57 @@ def main(args, logging):
     imgs_real = imgs_real / 128. - 1
     imgs_real = tf.image.random_flip_left_right(imgs_real)
 
+    # gmm_layer = layers.GMM(10)
+    generator = gael.Generator(args.dim_decoder, 4, 'relu', None)
+    encoder = gael.Encoder(z_len, args.dim_encoder, 'relu', None)
+    discriminator = gael.Discriminator(z_len, args.dim_discriminator, 'relu', None)
     # network
-    x_gen = model.x_generator(sam_z, args.dim_decoder, is_training=True, image_size=image_size, reuse=False)
-    z_gen = model.z_generator(imgs_real, z_len, args.dim_encoder, is_training=True, image_size=image_size, reuse=False)
+    x_gen = generator((sam_z, None), training=True)
+    z_gen = encoder((imgs_real, None), training=True)
+    # gmm_prob = gmm_layer(z_gen)
+    # gmm_likelihood = -tf.reduce_mean(gmm_prob)
 
     # lr prior
-    imgs_real_lr = tf.image.flip_left_right(imgs_real)
-    z_gen_lr = model.z_generator(imgs_real_lr, z_len, args.dim_encoder, is_training=True, image_size=image_size,
-                                 reuse=True)
+    # imgs_real_lr = tf.image.flip_left_right(imgs_real)
+    # z_gen_lr = model.z_generator(imgs_real_lr, z_len, args.dim_encoder, is_training=True, image_size=image_size,
+    #                              reuse=True)
+    # gmm2 = gmm_layer(z_gen_lr)
 
     imgs_concat = tf.concat([imgs_real, x_gen], 0)
     z_concat = tf.concat([z_gen, sam_z], 0)
-    t_d = model.discriminator(imgs_concat, z_concat, args.dim_discriminator, is_training=True, image_size=image_size,
+    t_d, out_x = model.discriminator(imgs_concat, z_concat, args.dim_discriminator, is_training=True, image_size=image_size,
                               reuse=False)
+    ml2 = tf.reduce_mean((out_x - z_concat) ** 2, 1)
     p1, q1 = tf.split(t_d, 2)
+    # ml1_1, ml1_2 = tf.split(ml1, 2)
+    ml2_1, ml2_2 = tf.split(ml2, 2)
 
-    t_d = model.discriminator(imgs_concat, z_concat, args.dim_discriminator, is_training=False, image_size=image_size,
+    # ml_disc_real = tf.reduce_mean(ml1_1)
+    ml_disc_fake = tf.reduce_mean(ml2_2)
+
+    t_d, out_x = model.discriminator(imgs_concat, z_concat, args.dim_discriminator, is_training=False, image_size=image_size,
                               reuse=True)
+    ml2 = tf.reduce_mean((out_x - z_concat) ** 2, 1)
     p2, q2 = tf.split(t_d, 2)
+    # ml1_1, ml1_2 = tf.split(ml1, 2)
+    ml2_1, ml2_2 = tf.split(ml2, 2)
+
+    ml_gen_real = tf.reduce_mean(ml2_1)
+    # ml_gen_fake = tf.reduce_mean(ml1_2)
 
     # cost function
     disc_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=p1, labels=tf.ones_like(p1)))
     disc_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=q1, labels=tf.zeros_like(q1)))
-    disc_loss = (disc_real + disc_fake) / 2
+    disc_loss = (disc_real + disc_fake) / 2 + ml_disc_fake / 2
     gen_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=q2, labels=tf.ones_like(q2)))
-    enc_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=p2, labels=tf.zeros_like(p2)))
-    enc_gen_loss = (enc_loss + gen_loss) / 2
+    enc_gen_loss = gen_loss + ml_gen_real / 2
 
-    z1_loss = -1
-    if args.aug > 0:
-        z1_loss = tf.reduce_mean(tf.reduce_sum((z_gen - z_gen_lr) ** 2, 1))
-        enc_gen_loss += args.aug * z1_loss
-
-    if args.alice:
-        lamb = 1 / 1000
-        x_rec = model.x_generator(z_gen, args.dim_decoder, is_training=True, image_size=image_size, reuse=True)
-        z_rec = model.z_generator(x_gen, z_len, args.dim_encoder, is_training=True, image_size=image_size, reuse=True)
-        x_rec_loss = tf.reduce_mean(tf.abs(imgs_real - x_rec))
-        z_rec_loss = tf.reduce_mean(tf.abs(sam_z - z_rec))
-        enc_gen_loss += lamb * x_rec_loss + lamb * z_rec_loss
 
     # optimizer
     var = tf.trainable_variables()
-    x_gen_var = [v for v in var if 'Decoder' in v.name]
-    z_gen_var = [v for v in var if 'Encoder' in v.name]
+    x_gen_var = generator.trainable_variables
+    z_gen_var = encoder.trainable_variables
     disc_var = [v for v in var if 'Discriminator' in v.name]
-    gen_save = tf.train.Saver([v for v in tf.global_variables() if 'Decoder' in v.name])
-    enc_save = tf.train.Saver([v for v in tf.global_variables() if 'Encoder' in v.name])
     gen_opt = tf.train.AdamOptimizer(learning_rate=args.lr * 5, beta1=0.5, beta2=0.999)
     disc_opt = tf.train.AdamOptimizer(learning_rate=args.lr, beta1=0.5, beta2=0.999)
     gen_gv = gen_opt.compute_gradients(enc_gen_loss, var_list=x_gen_var + z_gen_var)
@@ -142,14 +149,15 @@ def main(args, logging):
 
     # for saving latent space
     t_input_x_eval = input_x_eval / 128. - 1
-    z_eval = model.z_generator(t_input_x_eval, z_len, args.dim_encoder, is_training=False, image_size=image_size,
-                               reuse=True)
+    z_eval = encoder((t_input_x_eval, None), training=True)
+
+    # gmm_prob_eval = gmm_layer.log_prob_for_each_gmm(z_eval)
 
     # save images
-    x_rec = model.x_generator(z_gen, args.dim_decoder, is_training=True, image_size=image_size, reuse=True)
+    x_rec = generator((z_gen, None), training=True)
     z = np.random.normal(size=(100, z_len)).astype(np.float32)
     z = tf.Variable(z, False)
-    x_gen_fix = model.x_generator(z, args.dim_decoder, is_training=True, image_size=image_size, reuse=True)
+    x_gen_fix = generator((z, None), training=True)
 
     if tensorboard_log:
         summary1 = utils_summary.summary_collection('col1')
@@ -165,16 +173,14 @@ def main(args, logging):
                 summary_cluster.add_summary_scalar(ph_NMI, 'NMI')
                 summary_cluster.add_summary_scalar(ph_ARI, 'ARI')
         with tf.name_scope('losses'):
+            summary1.add_summary_scalar(ml_gen_real, 'ml_gen_real')
+            summary1.add_summary_scalar(ml_disc_fake, 'ml_disc_fake')
             summary1.add_summary_scalar(disc_real, 'disc_real')
             summary1.add_summary_scalar(disc_fake, 'disc_fake')
             summary1.add_summary_scalar(disc_loss, 'disc_loss')
             summary1.add_summary_scalar(enc_gen_loss, 'enc_gen_loss')
             summary1.add_summary_scalar(gen_loss, 'gen_loss')
-            summary1.add_summary_scalar(enc_loss, 'enc_loss')
-            summary1.add_summary_scalar(z1_loss, 'z1_loss')
-            summary1.add_summary_scalar(tf.math.sqrt(tf.reduce_mean(gen_gv[len(x_gen_var)-2][0]**2)), 'gen_grad')
-            summary1.add_summary_scalar(tf.math.sqrt(tf.reduce_mean(gen_gv[len(gen_gv)-2][0]**2)), 'enc_grad')
-            summary1.add_summary_scalar(tf.math.sqrt(tf.reduce_mean(disc_gv[0][0]**2)), 'disc_grad')
+
         summary2.add_summary_image2(imgs_real, x_rec, 12 ** 2, 'Input')
         summary2.add_summary_image1(x_gen_fix, args.batch_size, 'Sam')
         summary2.add_collection(summary1)
@@ -183,9 +189,11 @@ def main(args, logging):
         summary_op_cluster = tf.summary.merge(summary_cluster.get_summary())
 
 
+    gmm = GaussianMixture(n_components=10)
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     init = tf.global_variables_initializer()
     config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False)
+    config.gpu_options.allow_growth = True
     with tf.Session(config=config) as sess:
         sess.run(init)
         # enc_save.restore(sess, tf.train.latest_checkpoint('/root/Documents/Cluster-With-GAN/results/clustering30/cifar10'))
@@ -216,7 +224,10 @@ def main(args, logging):
 
                     # -- train network -- #
                     x = sess.run(next_element_train)
-                    z = np.random.normal(size=(batch_size, z_len))
+                    if global_step < 600000:
+                        z = np.random.normal(size=(batch_size, z_len))
+                    else:
+                        z = np.concatenate([np.random.normal(size=(int(batch_size/2), z_len)), gmm.sample(int(batch_size / 2))[0]], 0)
                     start_time = time.time()
                     d_loss, _ = sess.run([disc_loss, disc_train_op], {input_x: x, sam_z: z})
                     for i in range(1):
@@ -226,7 +237,7 @@ def main(args, logging):
                     # -- save log -- #
                     if global_step % log_iter == 0:
                         examples_per_sec = batch_size / float(duration)
-                        info_str = '{}: Epoch: {:3d} ({:5d}/{:5d}), global_setp {:6d}, d_loss = {:.2f},g_loss = {:.2f} ({:.1f} examples/sec; {:.3f} sec/batch)'.format(
+                        info_str = '{}: Epoch: {:3d} ({:5d}/{:5d}), global_setp {:6d}, d_loss = {:.2f},g_loss = {:.2f}, ({:.1f} examples/sec; {:.3f} sec/batch)'.format(
                             datetime.now(), ep, it_in_epoch, it_per_epoch, global_step, d_loss, g_loss,
                             examples_per_sec, duration)
                         logging.info(info_str)
@@ -243,15 +254,19 @@ def main(args, logging):
                         print('\r', info_str, end='', flush=True)
                         latent_eval = []
                         label_eval = []
+                        y_pred = []
                         while True:
                             try:
                                 t_x, t_l = sess.run(next_element_eval)
                                 latent_eval.append(z_eval.eval({input_x_eval: t_x}))
                                 label_eval.append(t_l)
+                                # y_pred.append(np.argmax(gmm_prob_eval.eval({input_x_eval: t_x}), 1))
                             except tf.errors.OutOfRangeError:
                                 break
                         latent_eval = np.concatenate(latent_eval, 0)
                         label_eval = np.concatenate(label_eval, 0)
+                        # y_pred = np.concatenate(y_pred, 0)
+                        # print('NMI = {}'.format(metrics.normalized_mutual_info_score(label_eval, y_pred, 'geometric')))
                         latent_queue.append(latent_eval)
                         latent_ind += 1
                         save_latent_iter = latent_samples_iter[latent_ind]
@@ -265,6 +280,8 @@ def main(args, logging):
                                      summary_op_cluster,ph_ACC,ph_NMI,ph_ARI,logging)
                         cluster_thread = threading.Thread(target=calc_cluster, args=cluster_args)
                         cluster_thread.start()
+                        if global_step > 290000:
+                            gmm.fit(latent_list[-1])
 
 
                     # -- save images -- #
@@ -273,9 +290,9 @@ def main(args, logging):
                         summary_writer.add_summary(summary_str, global_step)
                         summary_writer.flush()
 
-                    if global_step % 100000 == 0 or (global_step >= 450000 and global_step % 5000 == 0):
-                        gen_save.save(sess, os.path.join(args.log_dir, 'gen-model'), global_step=global_step)
-                        enc_save.save(sess, os.path.join(args.log_dir, 'enc-model'), global_step=global_step)
+                    # if global_step % 100000 == 0 or (global_step >= 450000 and global_step % 5000 == 0):
+                    #     gen_save.save(sess, os.path.join(args.log_dir, 'gen-model'), global_step=global_step)
+                    #     enc_save.save(sess, os.path.join(args.log_dir, 'enc-model'), global_step=global_step)
 
                 except tf.errors.OutOfRangeError:
                     break
@@ -288,18 +305,18 @@ def main(args, logging):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('dataset', choices=['celeba', 'cifar10', 'cifar100', 'stl10'], type=str, help='choose dataset')
-    parser.add_argument('--train_on', default='all', choices=['train', 'test', 'all'], type=str,
+    parser.add_argument('--train_on', default='all', choices=['train', 'gael', 'all'], type=str,
                         help='on which images to train')
     parser.add_argument('--img_size', default=None, type=int, help='the seed of the network initial')
     parser.add_argument('log_dir', type=str, help='where to save all logs')
     parser.add_argument('--architecture', default='model2',
                         choices=['model1', 'model2', 'ALI_orig_celeba', 'ALI_orig_cifar10'],
                         type=str, help='maximum iteration until stop')
-    parser.add_argument('--max_iter', default=500000, type=int, help='maximum iteration until stop')
+    parser.add_argument('--max_iter', default=1000000, type=int, help='maximum iteration until stop')
     parser.add_argument('--seed', default=-1, type=int, help='the seed of the network initial')
     parser.add_argument('--lr', default=1e-4, type=float, help='learning rate')
     parser.add_argument('--batch_size', default=100, type=int, help='')
-    parser.add_argument('--pad_size', default=4, type=int, help='train padding size')
+    parser.add_argument('--pad_size', default=0, type=int, help='train padding size')
     parser.add_argument('--dim_decoder', default=128, type=int, help='decoder dimension')
     parser.add_argument('--dim_encoder', default=128, type=int, help='encoder dimension')
     parser.add_argument('--dim_discriminator', default=128, type=int, help='discriminator dimension')
