@@ -33,7 +33,7 @@ def discriminator(in_x, in_z,DIM, is_training,image_size, reuse):
         out_x = tf.layers.dense(out_x, 512)
         out_x = nonlinearity(out_x)
         out_x = tf.layers.dropout(out_x, 0.5, training=is_training)
-        out_x = tf.layers.dense(out_x, 64)
+        out_x1 = tf.layers.dense(out_x, 64)
 
 
         out_x = tf.layers.dense(out_xx, 512)
@@ -46,4 +46,4 @@ def discriminator(in_x, in_z,DIM, is_training,image_size, reuse):
         # ml1 = layers.gaussian_rank1.GaussianRank1(64)((out_x, in_z))
         # ml2 = layers.gaussian_rank1.GaussianRank1(64)((out_x, in_z))
         out_c = tf.layers.dense(out_x, 1)
-    return out_c, out_x
+    return out_c, out_x1

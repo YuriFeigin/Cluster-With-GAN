@@ -27,7 +27,7 @@ z_dim = 64
 log_iter = 100
 max_iter = 500000
 save_image_iter = 5000
-tensorboard_path = './results'
+tensorboard_path = 'results'
 
 (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
 imgs = np.concatenate([x_train, x_test]).astype(np.float32)
@@ -66,8 +66,8 @@ while global_step <= max_iter:  # for epoch
         z = np.random.normal(size=(batch_size, z_dim)).astype(np.float32)
         start_time = time.time()
         for i in range(1):
-            g_loss = model.train_generator_encoder((x, z, None))
-        d_loss = model.train_discriminator((x, z, None))
+            g_loss = model.train_generator_encoder((x, z, None), tf.cast(global_step, tf.int64))
+        d_loss = model.train_discriminator((x, z, None), tf.cast(global_step, tf.int64))
         duration = time.time() - start_time
 
         # -- save log -- #
@@ -94,9 +94,9 @@ while global_step <= max_iter:  # for epoch
 
         # -- save images -- #
         if global_step % save_image_iter == 0:
-            model.eval_clustering(dataset_eval)
-            model.images_summary()
-            model.reconstruction_images_summary(x)
+            model.eval_clustering(dataset_eval, tf.cast(global_step, tf.int64))
+            model.images_summary(global_step)
+            model.reconstruction_images_summary(x, tf.cast(global_step, tf.int64))
 
         # if global_step % 100000 == 0 or (global_step >= 450000 and global_step % 5000 == 0):
         #     gen_save.save(sess, os.path.join(args.log_dir, 'gen-model'), global_step=global_step)

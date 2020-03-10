@@ -33,7 +33,7 @@ class Model(ModelCommon, LayerCommon):
         images = tf.image.random_flip_left_right(images)
         return images
 
-    def discriminator_loss(self, inputs):
+    def discriminator_loss(self, inputs, step):
         imgs_real, z, labels = inputs
         imgs_real = self.input_augmentation(imgs_real)
 
@@ -43,31 +43,31 @@ class Model(ModelCommon, LayerCommon):
         real_fake_cost, z_reconstruct_cost = self.discriminator((tf.concat([imgs_real, x_gen], 0),
                                                                 tf.concat([z_gen, z], 0), None), training=True)
         p1, q1 = tf.split(real_fake_cost, 2)
-        # ml2_1, ml2_2 = tf.split(z_reconstruct_cost, 2)
+        ml2_1, ml2_2 = tf.split(z_reconstruct_cost, 2)
 
         disc_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=p1, labels=tf.ones_like(p1)))
         disc_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=q1, labels=tf.zeros_like(q1)))
-        # disc_ml_z = tf.reduce_mean((ml2_2-z)**2)
+        disc_ml_z = tf.reduce_mean((ml2_2-z)**2)
 
-        disc_loss = (disc_real + disc_fake) / 2 #+ disc_ml_z / 2
+        disc_loss = (disc_real + disc_fake) / 2 + disc_ml_z / 2
 
         with self.tensorboard_writer.as_default():
             with tf.name_scope('losses_disc'):
-                tf.summary.scalar('disc_real', disc_real)
-                tf.summary.scalar('disc_fake', disc_fake)
-                # tf.summary.scalar('disc_ml_z', disc_ml_z)
-                tf.summary.scalar('disc_loss', disc_loss)
+                tf.summary.scalar('disc_real', disc_real, step)
+                tf.summary.scalar('disc_fake', disc_fake, step)
+                tf.summary.scalar('disc_ml_z', disc_ml_z, step)
+                tf.summary.scalar('disc_loss', disc_loss, step)
         return disc_loss
 
-    # @tf.function
-    def train_discriminator(self, inputs):
+    @tf.function
+    def train_discriminator(self, inputs, step):
         with tf.GradientTape() as tape:
-            disc_loss = self.discriminator_loss(inputs)
+            disc_loss = self.discriminator_loss(inputs, step)
         gradients_of_discriminator = tape.gradient(disc_loss, self.discriminator.trainable_variables)
         self.opt_dis.apply_gradients(zip(gradients_of_discriminator, self.discriminator.trainable_variables))
         return disc_loss
 
-    def generator_encoder_loss(self, inputs):
+    def generator_encoder_loss(self, inputs, step):
         imgs_real, z, labels = inputs
         imgs_real = self.input_augmentation(imgs_real)
 
@@ -77,45 +77,47 @@ class Model(ModelCommon, LayerCommon):
         real_fake_cost, z_reconstruct_cost = self.discriminator((tf.concat([imgs_real, x_gen], 0),
                                                                 tf.concat([z_gen, z], 0), labels), training=False)
         p1, q1 = tf.split(real_fake_cost, 2)
-        # ml2_1, ml2_2 = tf.split(z_reconstruct_cost, 2)
+        ml2_1, ml2_2 = tf.split(z_reconstruct_cost, 2)
 
         gen_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=q1, labels=tf.ones_like(q1)))
-        # enc_ml_z = tf.reduce_mean((ml2_1-z_gen)**2)
+        enc_ml_z = tf.reduce_mean((ml2_1-z_gen)**2)
 
-        gen_enc_loss = gen_loss #+ enc_ml_z / 2
+        gen_enc_loss = gen_loss + enc_ml_z / 2
 
         with self.tensorboard_writer.as_default():
             with tf.name_scope('losses_gen_enc'):
-                tf.summary.scalar('gen_loss', gen_loss)
-                # tf.summary.scalar('enc_ml_z', enc_ml_z)
-                tf.summary.scalar('gen_enc_loss', gen_enc_loss)
+                tf.summary.scalar('gen_loss', gen_loss, step) # todo get summary to trains function gen + enc
+                tf.summary.scalar('enc_ml_z', enc_ml_z, step)
+                tf.summary.scalar('gen_enc_loss', gen_enc_loss, step)
         return gen_enc_loss
 
     @tf.function
-    def train_generator_encoder(self, inputs):
+    def train_generator_encoder(self, inputs, step):
         with tf.GradientTape() as tape:
-            gen_enc_loss = self.generator_encoder_loss(inputs)
+            gen_enc_loss = self.generator_encoder_loss(inputs, step)
         train_var = self.generator.trainable_variables + self.encoder.trainable_variables
         gradients_of_discriminator = tape.gradient(gen_enc_loss, train_var)
         self.opt_dis.apply_gradients(zip(gradients_of_discriminator, train_var))
         return gen_enc_loss
 
     # @tf.function
-    def images_summary(self):
+    def images_summary(self, step):
         with self.tensorboard_writer.as_default():
             x_gen = self.generator((self.const_z, None), training=False)
-            tf.summary.image('Sampling', self.convert_batch_images_to_one_image(x_gen), max_outputs=1)
+            with self.tensorboard_writer.as_default():
+                tf.summary.image('Sampling', self.convert_batch_images_to_one_image(x_gen), step)
 
     # @tf.function
-    def reconstruction_images_summary(self, images):
+    def reconstruction_images_summary(self, images, step):
         with self.tensorboard_writer.as_default():
             images = images / 128. - 1
             z_gen = self.encoder((images, None), training=False)
             x_gen = self.generator((z_gen, None), training=False)
-            tf.summary.image('Reconstruct',
-                             self.convert_batch_reconstructed_images_to_one_image(images, x_gen), max_outputs=1)
+            with self.tensorboard_writer.as_default():
+                tf.summary.image('Reconstruct',
+                                 self.convert_batch_reconstructed_images_to_one_image(images, x_gen), step)
 
-    def eval_clustering(self, dataset):
+    def eval_clustering(self, dataset, step):
         @tf.function
         def eval_batch(batch, labels=None):
             z_gen = self.encoder((batch, labels), training=False)
@@ -131,19 +133,18 @@ class Model(ModelCommon, LayerCommon):
         results = clustering.calc_cluster(latent, labels, 10) #todo change number of labels
         with self.tensorboard_writer.as_default():
             with tf.name_scope('cluster'):
-                tf.summary.scalar('ACC', results['ACC'])
-                tf.summary.scalar('NMI', results['NMI'])
-                tf.summary.scalar('ARI', results['ARI'])
+                tf.summary.scalar('ACC', results['ACC'], step)
+                tf.summary.scalar('NMI', results['NMI'], step)
+                tf.summary.scalar('ARI', results['ARI'], step)
 
 
 class Generator(tf.keras.Model, LayerCommon):
-    def __init__(self, ch, bottom_width, activation, n_classes=None):
+    def __init__(self, ch, bottom_width, activation, n_classes):
         super(Generator, self).__init__()
         self.ch = ch
         self.bottom_width = bottom_width
         self.activation = activations.get(activation)
         self.n_classes = n_classes
-
         self.dense1 = layers.Dense(bottom_width ** 2 * ch * 4)
         self.reshape2 = layers.Reshape([bottom_width, bottom_width, ch * 4])
         self.block_up3 = blocks.ResBlockUp(ch * 4, activation, n_classes=n_classes)
@@ -201,12 +202,12 @@ class Discriminator(tf.keras.Model, LayerCommon):
         self.activation = activations.get(activation)
         self.n_classes = n_classes
 
-        self.opt_block1 = blocks.OptimizedResBlock(ch, activation)
-        self.block_down2 = blocks.ResBlockDown(ch, activation)
+        self.opt_block1 = blocks.OptimizedResBlock(ch, activation, use_bn=False)
+        self.block_down2 = blocks.ResBlockDown(ch, activation, use_bn=False)
         self.dropout1 = layers.Dropout(0.2)
-        self.block3 = blocks.ResBlock(ch, activation)
+        self.block3 = blocks.ResBlock(ch, activation, use_bn=False)
         self.dropout2 = layers.Dropout(0.5)
-        self.block4 = blocks.ResBlock(ch, activation)
+        self.block4 = blocks.ResBlock(ch, activation, use_bn=False)
         self.dropout3 = layers.Dropout(0.5)
         # self.global_average_pool5 = layers.GlobalAveragePooling2D()
         self.flatten = layers.Flatten()

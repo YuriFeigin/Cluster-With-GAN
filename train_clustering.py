@@ -109,6 +109,7 @@ def main(args, logging):
     z_concat = tf.concat([z_gen, sam_z], 0)
     t_d, out_x = model.discriminator(imgs_concat, z_concat, args.dim_discriminator, is_training=True, image_size=image_size,
                               reuse=False)
+    # t_d, out_x = discriminator((imgs_concat, z_concat, None), training=True)
     ml2 = tf.reduce_mean((out_x - z_concat) ** 2, 1)
     p1, q1 = tf.split(t_d, 2)
     # ml1_1, ml1_2 = tf.split(ml1, 2)
@@ -119,6 +120,7 @@ def main(args, logging):
 
     t_d, out_x = model.discriminator(imgs_concat, z_concat, args.dim_discriminator, is_training=False, image_size=image_size,
                               reuse=True)
+    # t_d, out_x = discriminator((imgs_concat, z_concat, None), training=False)
     ml2 = tf.reduce_mean((out_x - z_concat) ** 2, 1)
     p2, q2 = tf.split(t_d, 2)
     # ml1_1, ml1_2 = tf.split(ml1, 2)
@@ -139,6 +141,7 @@ def main(args, logging):
     var = tf.trainable_variables()
     x_gen_var = generator.trainable_variables
     z_gen_var = encoder.trainable_variables
+    # disc_var = discriminator.trainable_variables
     disc_var = [v for v in var if 'Discriminator' in v.name]
     gen_opt = tf.train.AdamOptimizer(learning_rate=args.lr * 5, beta1=0.5, beta2=0.999)
     disc_opt = tf.train.AdamOptimizer(learning_rate=args.lr, beta1=0.5, beta2=0.999)
