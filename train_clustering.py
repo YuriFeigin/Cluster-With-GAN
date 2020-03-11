@@ -53,6 +53,9 @@ def main(args, logging):
     save_image_iter = args.save_image_iter
     calc_cluster_flag = args.calc_cluster
     cluster_sample = args.cluster_sample
+    gen_tf2 = False
+    enc_tf2 = False
+    disc_tf2 = False
 
     # prepare for saving latent space
     os.makedirs(os.path.join(args.log_dir, 'latent'), exist_ok=True)
@@ -94,8 +97,14 @@ def main(args, logging):
     encoder = gael.Encoder(z_len, args.dim_encoder, 'relu', None)
     discriminator = gael.Discriminator(z_len, args.dim_discriminator, 'relu', None)
     # network
-    x_gen = generator((sam_z, None), training=True)
-    z_gen = encoder((imgs_real, None), training=True)
+    if gen_tf2:
+        x_gen = generator((sam_z, None), training=True)
+    else:
+        x_gen = model.x_generator(sam_z, args.dim_decoder, is_training=True, image_size=image_size, reuse=False)
+    if enc_tf2:
+        z_gen = encoder((imgs_real, None), training=True)
+    else:
+        z_gen = model.z_generator(imgs_real, z_len, args.dim_encoder, is_training=True, image_size=image_size, reuse=False)
     # gmm_prob = gmm_layer(z_gen)
     # gmm_likelihood = -tf.reduce_mean(gmm_prob)
 
@@ -107,9 +116,11 @@ def main(args, logging):
 
     imgs_concat = tf.concat([imgs_real, x_gen], 0)
     z_concat = tf.concat([z_gen, sam_z], 0)
-    t_d, out_x = model.discriminator(imgs_concat, z_concat, args.dim_discriminator, is_training=True, image_size=image_size,
-                              reuse=False)
-    # t_d, out_x = discriminator((imgs_concat, z_concat, None), training=True)
+    if disc_tf2:
+        t_d, out_x = discriminator((imgs_concat, z_concat, None), training=True)
+    else:
+        t_d, out_x = model.discriminator(imgs_concat, z_concat, args.dim_discriminator, is_training=True, image_size=image_size,
+                                  reuse=False)
     ml2 = tf.reduce_mean((out_x - z_concat) ** 2, 1)
     p1, q1 = tf.split(t_d, 2)
     # ml1_1, ml1_2 = tf.split(ml1, 2)
@@ -118,9 +129,11 @@ def main(args, logging):
     # ml_disc_real = tf.reduce_mean(ml1_1)
     ml_disc_fake = tf.reduce_mean(ml2_2)
 
-    t_d, out_x = model.discriminator(imgs_concat, z_concat, args.dim_discriminator, is_training=False, image_size=image_size,
-                              reuse=True)
-    # t_d, out_x = discriminator((imgs_concat, z_concat, None), training=False)
+    if disc_tf2:
+        t_d, out_x = discriminator((imgs_concat, z_concat, None), training=False)
+    else:
+        t_d, out_x = model.discriminator(imgs_concat, z_concat, args.dim_discriminator, is_training=False, image_size=image_size,
+                                  reuse=True)
     ml2 = tf.reduce_mean((out_x - z_concat) ** 2, 1)
     p2, q2 = tf.split(t_d, 2)
     # ml1_1, ml1_2 = tf.split(ml1, 2)
@@ -152,15 +165,25 @@ def main(args, logging):
 
     # for saving latent space
     t_input_x_eval = input_x_eval / 128. - 1
-    z_eval = encoder((t_input_x_eval, None), training=True)
+    if enc_tf2:
+        z_eval = encoder((t_input_x_eval, None), training=True)
+    else:
+        z_eval = model.z_generator(t_input_x_eval, z_len, args.dim_encoder, is_training=False, image_size=image_size,
+                                   reuse=True)
 
     # gmm_prob_eval = gmm_layer.log_prob_for_each_gmm(z_eval)
 
     # save images
-    x_rec = generator((z_gen, None), training=True)
+    if gen_tf2:
+        x_rec = generator((z_gen, None), training=True)
+    else:
+        x_rec = model.x_generator(z_gen, args.dim_decoder, is_training=True, image_size=image_size, reuse=True)
     z = np.random.normal(size=(100, z_len)).astype(np.float32)
     z = tf.Variable(z, False)
-    x_gen_fix = generator((z, None), training=True)
+    if gen_tf2:
+        x_gen_fix = generator((z, None), training=True)
+    else:
+        x_gen_fix = model.x_generator(z, args.dim_decoder, is_training=True, image_size=image_size, reuse=True)
 
     if tensorboard_log:
         summary1 = utils_summary.summary_collection('col1')
