@@ -152,10 +152,18 @@ def main(args, logging):
 
     # optimizer
     var = tf.trainable_variables()
-    x_gen_var = generator.trainable_variables
-    z_gen_var = encoder.trainable_variables
-    # disc_var = discriminator.trainable_variables
-    disc_var = [v for v in var if 'Discriminator' in v.name]
+    if gen_tf2:
+        x_gen_var = generator.trainable_variables
+    else:
+        x_gen_var = [v for v in var if 'Decoder' in v.name]
+    if enc_tf2:
+        z_gen_var = encoder.trainable_variables
+    else:
+        z_gen_var = [v for v in var if 'Encoder' in v.name]
+    if disc_tf2:
+        disc_var = discriminator.trainable_variables
+    else:
+        disc_var = [v for v in var if 'Discriminator' in v.name]
     gen_opt = tf.train.AdamOptimizer(learning_rate=args.lr * 5, beta1=0.5, beta2=0.999)
     disc_opt = tf.train.AdamOptimizer(learning_rate=args.lr, beta1=0.5, beta2=0.999)
     gen_gv = gen_opt.compute_gradients(enc_gen_loss, var_list=x_gen_var + z_gen_var)
