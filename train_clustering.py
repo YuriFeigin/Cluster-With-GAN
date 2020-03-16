@@ -126,8 +126,11 @@ def main(args, logging):
     # ml1_1, ml1_2 = tf.split(ml1, 2)
     ml2_1, ml2_2 = tf.split(ml2, 2)
 
-    # ml_disc_real = tf.reduce_mean(ml1_1)
+    # cost function
     ml_disc_fake = tf.reduce_mean(ml2_2)
+    disc_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=p1, labels=tf.ones_like(p1)))
+    disc_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=q1, labels=tf.zeros_like(q1)))
+    disc_loss = (disc_real + disc_fake) / 2 + ml_disc_fake / 2
 
     if disc_tf2:
         t_d, out_x = discriminator((imgs_concat, z_concat, None), training=False)
@@ -143,9 +146,6 @@ def main(args, logging):
     # ml_gen_fake = tf.reduce_mean(ml1_2)
 
     # cost function
-    disc_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=p1, labels=tf.ones_like(p1)))
-    disc_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=q1, labels=tf.zeros_like(q1)))
-    disc_loss = (disc_real + disc_fake) / 2 + ml_disc_fake / 2
     gen_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=q2, labels=tf.ones_like(q2)))
     enc_gen_loss = gen_loss + ml_gen_real / 2
 
