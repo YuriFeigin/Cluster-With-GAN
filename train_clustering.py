@@ -133,9 +133,9 @@ def main(args, logging):
     disc_loss = (disc_real + disc_fake) / 2 + ml_disc_fake / 2
 
     if disc_tf2:
-        t_d, out_x = discriminator((imgs_concat, z_concat, None), training=False)
+        t_d, out_x = discriminator((imgs_concat, z_concat, None), training=True)
     else:
-        t_d, out_x = model.discriminator(imgs_concat, z_concat, args.dim_discriminator, is_training=False, image_size=image_size,
+        t_d, out_x = model.discriminator(imgs_concat, z_concat, args.dim_discriminator, is_training=True, image_size=image_size,
                                   reuse=True)
     ml2 = tf.reduce_mean((out_x - z_concat) ** 2, 1)
     p2, q2 = tf.split(t_d, 2)
@@ -174,7 +174,7 @@ def main(args, logging):
     # for saving latent space
     t_input_x_eval = input_x_eval / 128. - 1
     if enc_tf2:
-        z_eval = encoder((t_input_x_eval, None), training=True)
+        z_eval = encoder((t_input_x_eval, None), training=False)
     else:
         z_eval = model.z_generator(t_input_x_eval, z_len, args.dim_encoder, is_training=False, image_size=image_size,
                                    reuse=True)
@@ -185,13 +185,13 @@ def main(args, logging):
     if gen_tf2:
         x_rec = generator((z_gen, None), training=True)
     else:
-        x_rec = model.x_generator(z_gen, args.dim_decoder, is_training=True, image_size=image_size, reuse=True)
+        x_rec = model.x_generator(z_gen, args.dim_decoder, is_training=False, image_size=image_size, reuse=True)
     z = np.random.normal(size=(100, z_len)).astype(np.float32)
     z = tf.Variable(z, False)
     if gen_tf2:
-        x_gen_fix = generator((z, None), training=True)
+        x_gen_fix = generator((z, None), training=False)
     else:
-        x_gen_fix = model.x_generator(z, args.dim_decoder, is_training=True, image_size=image_size, reuse=True)
+        x_gen_fix = model.x_generator(z, args.dim_decoder, is_training=False, image_size=image_size, reuse=True)
 
     if tensorboard_log:
         summary1 = utils_summary.summary_collection('col1')
