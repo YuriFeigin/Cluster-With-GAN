@@ -222,9 +222,7 @@ def main(args, logging):
         summary_op_2 = tf.summary.merge(summary2.get_summary())
         summary_op_cluster = tf.summary.merge(summary_cluster.get_summary())
 
-
-    gmm = GaussianMixture(n_components=10)
-    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS) + encoder.updates + generator.updates
     init = tf.global_variables_initializer()
     config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False)
     config.gpu_options.allow_growth = True
@@ -258,10 +256,7 @@ def main(args, logging):
 
                     # -- train network -- #
                     x = sess.run(next_element_train)
-                    if global_step < 600000:
-                        z = np.random.normal(size=(batch_size, z_len))
-                    else:
-                        z = np.concatenate([np.random.normal(size=(int(batch_size/2), z_len)), gmm.sample(int(batch_size / 2))[0]], 0)
+                    z = np.random.normal(size=(batch_size, z_len))
                     start_time = time.time()
                     d_loss, _ = sess.run([disc_loss, disc_train_op], {input_x: x, sam_z: z})
                     for i in range(1):
@@ -314,8 +309,6 @@ def main(args, logging):
                                      summary_op_cluster,ph_ACC,ph_NMI,ph_ARI,logging)
                         cluster_thread = threading.Thread(target=calc_cluster, args=cluster_args)
                         cluster_thread.start()
-                        if global_step > 290000:
-                            gmm.fit(latent_list[-1])
 
 
                     # -- save images -- #
